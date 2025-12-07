@@ -199,7 +199,7 @@ export class HubConnection {
                 this.log(LogLevel.Information, "finalUrl:", finalUrl);
 
             } catch (e: any) {
-                this.log(LogLevel.Error, 'Negotiation failed', e);
+                //this.log(LogLevel.Error, 'Negotiation failed', e);
                 throw e; 
             }
         }
@@ -225,18 +225,6 @@ export class HubConnection {
         return new Promise((resolve, reject) => {
             const ws = new WebSocket(wsUrl);
             this.socket = ws;
-
-            // --- NEW: Capture Handshake Errors ---
-            // (ws as any).on('unexpected-response', (req: any, res: any) => {
-            //     const debugInfo = `HTTP ${res.statusCode} ${res.statusMessage}`;
-            //     // Read the response body if possible to see error details
-            //     let body = '';
-            //     res.on('data', (chunk: any) => body += chunk);
-            //     res.on('end', () => {
-            //         this.log(LogLevel.Error, `Connection rejected by server: ${debugInfo}`, body);
-            //         // The 'error' event will usually follow this, but we log explicitly here
-            //     });
-            // });
 
             ws.onopen = () => {
                 this.log(LogLevel.Debug, 'WebSocket Connected. Sending Handshake.');
@@ -323,26 +311,27 @@ export class HubConnection {
         }
     }
 
-    private resolveNegotiateUrl(url: string): string {
-        const index = url.indexOf('?');
-        let base = url;
-        let query = '';
+    // private resolveNegotiateUrl(url: string): string {
+    //     const index = url.indexOf('?');
+    //     let base = url;
+    //     let query = '';
 
-        // Separate the Base URL (Path) from the Query String
-        if (index !== -1) {
-            base = url.substring(0, index);
-            query = url.substring(index);
-        }
+    //     // Separate the Base URL (Path) from the Query String
+    //     if (index !== -1) {
+    //         base = url.substring(0, index);
+    //         query = url.substring(index);
+    //     }
 
-        // Append /negotiate to the path
-        base = base.replace(/\/$/, '') + '/negotiate';
+    //     // Append /negotiate to the path
+    //     base = base.replace(/\/$/, '') + '/negotiate';
 
-        // Reconstruct: Path/negotiate + Original Query + Negotiate Version
-        let u = base + query;
-        // u += (u.indexOf('?') === -1 ? '?' : '&') + 'negotiateVersion=1';
-        u += "&group=mediasix%2Fworkflow-test";
-        return u;
-    }
+    //     // Reconstruct: Path/negotiate + Original Query + Negotiate Version
+    //     let u = base + query;
+    //     // u += (u.indexOf('?') === -1 ? '?' : '&') + 'negotiateVersion=1';
+    //     // u += "&group=mediasix%2Fworkflow-test";
+    //     u += "&group=" + this.group;
+    //     return u;
+    // }
 
     private startKeepAlive() {
         clearInterval(this.keepAliveInterval);
@@ -357,9 +346,22 @@ export class HubConnection {
         this.pendingInvocations.clear();
     }
 
-    private fireReconnectingCallbacks(err?: Error) { this.onReconnectingCallbacks.forEach(cb => { try { cb(err); } catch {} }); }
-    private fireReconnectedCallbacks() { const id = this.connectionId || undefined; this.onReconnectedCallbacks.forEach(cb => { try { cb(id); } catch {} }); }
-    private fireCloseCallbacks(err?: Error) { this.onCloseCallbacks.forEach(cb => { try { cb(err); } catch {} }); }
+    private fireReconnectingCallbacks(err?: Error)
+    {
+        this.onReconnectingCallbacks.forEach(cb => { try { cb(err); } catch {} });
+    }
+
+    private fireReconnectedCallbacks() 
+    {
+        const id = this.connectionId || undefined; 
+        this.onReconnectedCallbacks.forEach(cb => { try { cb(id); } catch {} }); 
+    }
+    
+    private fireCloseCallbacks(err?: Error) 
+    {
+         this.onCloseCallbacks.forEach(cb => { try { cb(err); } catch {} }); 
+    }
+    
     private log(level: LogLevel, msg: string, ...args: any[]) {
         if (level >= this.logLevel) {
             const prefix = `[${new Date().toISOString()}]`;
@@ -377,7 +379,7 @@ export class HubConnectionBuilder {
     private apiKey = '';
     private group = '';
     private options: IHttpConnectionOptions = {};
-    private reconnectDelays = [0, 2000, 10000, 30000];
+    private reconnectDelays = [0, 2000, 2000, 2000, 5000, 5000, 5000, 10000, 10000, 10000];
     private logLevel = LogLevel.Information;
 
     public withUrl(url: string, options?: IHttpConnectionOptions): this {
@@ -465,5 +467,14 @@ export class SignalRClient {
     public async send(methodName: string, ...args: any[]): Promise<any> {
         // Return the promise so the caller can await completion/results if needed
         return this.connection.invoke(methodName, ...args);
+    }
+
+    /**
+     * Registers a callback to run when the connection is re-established 
+     * after being lost. Use this to re-register groups or workflows.
+     * @param callback Function to execute. receives the new Connection ID.
+     */
+    public onReconnected(callback: (connectionId?: string) => void): void {
+        this.connection.onreconnected(callback);
     }
 }

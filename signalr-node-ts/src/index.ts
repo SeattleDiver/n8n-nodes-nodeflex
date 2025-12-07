@@ -2,13 +2,12 @@
 import { SignalRClient } from './SignalRClient';
 import { PrivateWorkflowRequest } from './PrivateWorkflowRequest';
 import { PrivateWorkflowResponse } from './PrivateWorkflowResponse';
-import { TinySignalRClient } from './TinySignalRClient';
 
 // Configuration
 // Use 127.0.0.1 instead of localhost to prevent node from defaulting to IPv6 (::1)
 const HUB_URL = "http://127.0.0.1:5268/workflow"; 
 const API_KEY = "AN9FMzZ4ZeHgNutVXJ9OdLYIyRha2ovIrTXJAEvjgD9nypxS";
-const WORKFLOW_PATH = "mediasix/workflow-test";
+const WORKFLOW_PATH = "mediasix/test-workflow";
 
 async function main() {
 
@@ -19,6 +18,20 @@ async function main() {
     // We pass the path here so the generic client injects it into the WebSocket URL.
     // This allows the server's OnConnectedAsync to register the group immediately.
     const client = new SignalRClient(HUB_URL, API_KEY, WORKFLOW_PATH);
+
+    // --- HELPER: Registration Logic (Used for Initial Start AND Reconnects) ---
+    const registerToHub = async () => {
+        try {
+            const registrationPayload = {
+                apiKey: API_KEY,
+                path: WORKFLOW_PATH,
+            };
+            await client.send("RegisterPrivateWorkflow", registrationPayload);
+            console.log(`[REGISTRY] Registered for path: ${WORKFLOW_PATH}`);
+        } catch (err) {
+            console.error("[REGISTRY] Registration failed:", err);
+        }
+    };
 
     // 2. Setup Listeners
     client.on("ExecutePrivateWorkflow", async (request: PrivateWorkflowRequest) => {
@@ -38,12 +51,18 @@ async function main() {
         // 3. Construct Response
         // Use strict camelCase properties to match PrivateWorkflowResponse interface
         // and standard SignalR JSON serialization.
+        const resultString = JSON.stringify(processingResult)
         const response: PrivateWorkflowResponse = {
             requestId: request.requestId || "", // Handle potential undefined
-            statusCode: 200,
             path: request.path || "",
-            payload: JSON.stringify(processingResult),
+            payload: {
+                type: 'inline',
+                value: resultString,
+                length: resultString.length,
+                isEncrypted: true
+            }
         };
+        console.log("response:" + JSON.stringify(response));
 
         try {
             console.log("Sending completion response...");
@@ -52,6 +71,14 @@ async function main() {
         } catch (err) {
             console.error("Failed to send response:", err);
         }
+
+        // B. Handle Reconnection (The New Addition)
+        // This callback runs automatically when the connection drops and is restored.
+        // client.onReconnected(async (newConnectionId) => {
+        //     console.warn(`[LIFECYCLE] Connection restored! New ID: ${newConnectionId}`);
+        //     // We must re-register because the server likely cleaned up our mapping during the disconnect
+        //     await registerToHub();
+        // });
     });
 
     // 3. Connect with Startup Retry Logic
@@ -62,7 +89,12 @@ async function main() {
         try {
             await client.start();
             console.log("Connected to Hub.");
+
+            await registerToHub();
+
+            console.log("Listening for messages. Press Ctrl+C to exit.");
             break; // Exit loop on success
+
         } catch (err) {
             console.error("Connection failed. Retrying in 5 seconds...");
             // Cast error to access message safely
@@ -74,23 +106,23 @@ async function main() {
         }
     }
 
-    // 4. Register and Run
-    try {
-        // We still send the registration packet so the custom _tracker on the server is updated
-        // (even though the group was likely added via the WebSocket URL params)
-        const registrationPayload = {
-            apiKey: API_KEY,
-            path: WORKFLOW_PATH,
-        };
+    // Register the handler BEFORE starting
+    client.onReconnected(async (newConnectionId) => {
+        console.log(`Connection restored! New ID: ${newConnectionId}`);
         
-        await client.send("RegisterPrivateWorkflow", registrationPayload);
-        console.log(`Registered for path: ${WORKFLOW_PATH}`);
-        console.log("Listening for messages. Press Ctrl+C to exit.");
-
-    } catch (err) {
-        console.error("Registration failed:", err);
-        // We generally don't exit here; the connection might still be alive
-    }
+        try {
+            // Re-register your workflow or identity
+            const registrationPayload = {
+                apiKey: API_KEY,
+                path: WORKFLOW_PATH,
+            };
+            await client.send("RegisterPrivateWorkflow", registrationPayload);
+            console.log("Workflow re-registered successfully");
+        } catch (err) {
+            console.error("Failed to re-register workflow after reconnect", err);
+        }
+    });
+    
 }
 
 main();
