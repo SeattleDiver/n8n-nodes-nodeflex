@@ -13,6 +13,7 @@ export class HubUrlService {
      */
     public async getHubUrl(apiKey: string): Promise<string> {
 
+			try{
         const url = `${this.apiBaseUrl}/api/apikeys/hub?apiKey=${encodeURIComponent(apiKey)}`;
 				console.log('hub redirect url: ', url);
         const response = await fetch(url, {
@@ -40,5 +41,9 @@ export class HubUrlService {
         }
 
         return hubUrl;
+			}
+			catch{
+				return "";
+			}
     }
 }

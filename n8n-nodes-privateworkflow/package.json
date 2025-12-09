@@ -57,8 +57,6 @@
     "url": "https://github.com/seattlediver/n8n-cloudworkflow/issues"
   },
   "dependencies": {
-    "@microsoft/signalr": "^9.0.6",
-    "n8n-core": "^1.115.0",
-    "ws": "^8.18.3"
+    "n8n-core": "^1.115.0"
   }
 }

@@ -232,7 +232,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			`[RespondToPrivateWorkflow] Sending response → req=${entry.requestId}, corr=${correlationId}, mode=${respondWith}`
 		);
 
-		await entry.client.sendResponseToHub(entry.requestId, payload, entry.path);
+		await entry.client.sendResponseToHub(entry.correlationId, entry.requestId, payload, entry.path);
 
 		// ✅ Cleanup once
 		clearTimeout(entry.timeout);

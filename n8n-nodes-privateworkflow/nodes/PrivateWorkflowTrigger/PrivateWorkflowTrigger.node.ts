@@ -9,7 +9,7 @@ import {
 	INodeExecutionData
 } from 'n8n-workflow';
 //import crypto, { OneShotDigestOptionsWithBufferEncoding } from 'crypto'
-import crypto from 'crypto'
+//import crypto from 'crypto'
 import { SignalRPrivateWorkflowClient } from '../../library/SignalRPrivateWorkflowClient'
 import { PrivateWorkflowResponseRegistry } from '../../library/PrivateWorkflowResponseRegistry';
 import { HubUrlService } from '../../library/HubUrlService';
@@ -118,7 +118,11 @@ export class PrivateWorkflowTrigger implements INodeType {
 				self.logger.info("Using ApiKey: " + apiKey);
 
 				const hubService = new HubUrlService(hubBase);
-				const hubUrl = await hubService.getHubUrl(apiKey);
+				const hubUrl: string = await hubService.getHubUrl(apiKey);
+				if (!hubUrl)
+				{
+     	 		throw new NodeOperationError(this.getNode(), 'Hub URL is unavailable.  Hub service is down.');
+				}
 
 				self.logger.info(`Resolved Hub url: ${hubUrl}`);
 
@@ -178,7 +182,12 @@ export class PrivateWorkflowTrigger implements INodeType {
 									respondMode = 'immediately';
 								}
 
- 								const correlationId = crypto.randomUUID();
+ 								// const correlationId = crypto.randomUUID();
+								const correlationId = request?.correlationId ?? request?.CorrelationId;
+								if (!correlationId || correlationId == "")
+								{
+									throw new NodeOperationError(this.getNode(), 'CorrelationId is required!');
+								}
 
 								// Emit to workflow (starts a new execution in n8n)
 								let payload: IDataObject[];
@@ -216,6 +225,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 										// Send hub response right here
 										void client.sendResponseToHub(
+											correlationId,
 											requestId,
 											{ ok: true, mode: respondMode, receivedAt: new Date().toISOString() },
 											hubPath,
@@ -288,7 +298,6 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 								self.logger?.error?.(`Error in onExecute: ${(err as Error)?.message ?? err}`);
 								return { ok: false, error: String(err) };
-
 							}
 						},
 

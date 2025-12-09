@@ -175,7 +175,7 @@ export class SignalRPrivateWorkflowClient {
 
 		try {
 			const ack = await this.conn.invoke('RegisterPrivateWorkflow', payload);
-			this.log('info', 'Registration sent', {
+			this.log('info', 'Registration attempt ' + this.cfg.hubPath, {
 				path: this.cfg.hubPath,
 				apiKey: mask(this.cfg.apiKey)
 			});
@@ -248,7 +248,7 @@ export class SignalRPrivateWorkflowClient {
 	// Send Response
 	// ------------------------------------------------------------------
 
-	public async sendResponseToHub(requestId: string, body: any, path: string): Promise<void> {
+	public async sendResponseToHub(correlationId: string, requestId: string, body: any, path: string): Promise<void> {
 				if (!this.conn) {
 						this.log('warn', 'Cannot send response: connection not active');
 						return;
@@ -265,6 +265,7 @@ export class SignalRPrivateWorkflowClient {
 						};
 
 						const response: PrivateWorkflowResponse = {
+							  correlationId,
 								requestId,
 								path,
 								payload,
@@ -276,36 +277,6 @@ export class SignalRPrivateWorkflowClient {
 						this.log('error', `Failed to send response for ${requestId}`, err);
 				}
 		}
-
-	// public async sendResponseToHub(requestId: string, body: any, path?: string): Promise<void> {
-	// 	if (!this.conn) {
-	// 		this.log('warn', 'Cannot send response: no active connection');
-	// 		return;
-	// 	}
-
-	// 	try {
-	// 		let bytes: Buffer;
-	// 		if (Buffer.isBuffer(body)) bytes = body;
-	// 		else if (body instanceof Uint8Array) bytes = Buffer.from(body);
-	// 		else if (typeof body === 'string') bytes = Buffer.from(body, 'utf8');
-	// 		else bytes = Buffer.from(JSON.stringify(body ?? {}), 'utf8');
-
-	// 		const response: PrivateWorkflowResponse = {
-	// 			RequestId: requestId,
-	// 			StatusCode: 200,
-	// 			Path: path,
-	// 			Headers: { 'content-type': 'application/json' },
-	// 			Payload: bytes.toString('base64'),
-	// 			IsFinal: true
-	// 		};
-
-	// 		await this.conn.invoke('CompletePrivateWorkflow', response);
-	// 		this.log('info', `Sent CompletePrivateWorkflow for ${requestId}`);
-
-	// 	} catch (err: any) {
-	// 		this.log('error', `Failed to send response for ${requestId}`, err);
-	// 	}
-	// }
 
 	// ------------------------------------------------------------------
 	// Logging passthrough

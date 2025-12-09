@@ -8,7 +8,10 @@ import type {
 export class PrivateWorkflowApi implements ICredentialType {
 	name = 'privateWorkflowApi';
 	displayName = 'Private Workflow API';
-	documentationUrl = 'https://www.n8ncloud.io/docs';
+	documentationUrl = 'https://github.com/SeattleDiver/n8ncloud-workflow';
+	description = `Authentication credentials for the Private Workflow.
+
+	**Documentation:** [View Setup Guide](https://github.com/SeattleDiver/n8ncloud-workflow)`;
 
 	// 👇 The standard n8n properties definition
 	properties: INodeProperties[] = [
