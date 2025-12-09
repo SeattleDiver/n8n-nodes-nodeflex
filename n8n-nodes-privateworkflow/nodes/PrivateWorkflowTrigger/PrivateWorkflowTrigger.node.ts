@@ -8,11 +8,12 @@ import {
 	IDataObject,
 	INodeExecutionData
 } from 'n8n-workflow';
-
+//import crypto, { OneShotDigestOptionsWithBufferEncoding } from 'crypto'
+import crypto from 'crypto'
 import { SignalRPrivateWorkflowClient } from '../../library/SignalRPrivateWorkflowClient'
 import { PrivateWorkflowResponseRegistry } from '../../library/PrivateWorkflowResponseRegistry';
+import { HubUrlService } from '../../library/HubUrlService';
 
-import crypto from 'crypto'
 
 export class PrivateWorkflowTrigger implements INodeType {
 
@@ -42,17 +43,17 @@ export class PrivateWorkflowTrigger implements INodeType {
 					displayName: 'Hub Environment',
 					name: 'hubUrl',
 					type: 'options',
-					default: 'http://localhost:5268/workflow',
+					default: 'http://localhost:5268',
 					description: 'Select the environment for the SignalR hub connection.',
 					options: [
 						{
 							name: 'Development',
-							value: 'http://localhost:5268/workflow',
+							value: 'http://localhost:5268',
 							description: 'Local development server.',
 						},
 						{
 							name: 'Production',
-							value: 'https://hub.n8ncloud.io/workflow',
+							value: 'https://hub.n8ncloud.io',
 							description: 'Cloud production server.',
 						},
 					],
@@ -99,8 +100,11 @@ export class PrivateWorkflowTrigger implements INodeType {
     async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
 
 			  const self = this;
-        const hubUrl = this.getNodeParameter('hubUrl', 0) as string;
+        const hubBase = this.getNodeParameter('hubUrl', 0) as string;
         const hubPath = this.getNodeParameter('hubPath', 0) as string;
+
+			  self.logger.info("hubBase: " + hubBase);
+				self.logger.info("hubPath: " + hubPath);
 
 				const creds = (await this.getCredentials('privateWorkflowApi')) as {
       		apiKey?: string;
@@ -112,6 +116,11 @@ export class PrivateWorkflowTrigger implements INodeType {
     		}
         var apiKey = creds?.apiKey;
 				self.logger.info("Using ApiKey: " + apiKey);
+
+				const hubService = new HubUrlService(hubBase);
+				const hubUrl = await hubService.getHubUrl(apiKey);
+
+				self.logger.info(`Resolved Hub url: ${hubUrl}`);
 
         // const accessToken = creds?.accessToken;
         // const apiKey = 'AN9FMzZ4ZeHgNutVXJ9OdLYIyRha2ovIrTXJAEvjgD9nypxS'; // <-- for testing only
@@ -138,14 +147,16 @@ export class PrivateWorkflowTrigger implements INodeType {
 						//   The payload may be encrypted. If we have a privateKey defined, then we must decrypt
 						//   the payload before we use it
 						// -------------------------------------------------------------------------------------------------------------------------------------------
-						onExecute: async ({ request, decodedJson, decodedText }) => {
+						onExecute: async ({ request, inlineJson, inlineText, payload }) => {
 
 							try {
 								// Prepare the item
-								//const item = decodedJson ?? { text: decodedText ?? null };
-								const base = (decodedJson && typeof decodedJson === 'object' && 'json' in decodedJson)
-									? (decodedJson as any).json
-									: decodedJson ?? { text: decodedText ?? null };
+								const raw = inlineJson ?? inlineText ?? null;
+
+								const base =
+										raw && typeof raw === 'object' && 'json' in raw
+												? (raw as any).json
+												: raw ?? { text: inlineText ?? null };
 
 							  const requestId =
 										request?.requestId ??
@@ -158,7 +169,8 @@ export class PrivateWorkflowTrigger implements INodeType {
 								this.logger.info("isManual " + isManual);
 								this.logger.info('respondMode: '+ respondMode);
 								this.logger.info('requestId: ' + requestId);
-								this.logger.info('json: ' + jsonStringify(decodedJson));
+								this.logger.info('inlineJson: ' + jsonStringify(inlineJson));
+								this.logger.info('inlineText: ' + inlineText);
 
 								// Override respond mode for manual triggers
 								if (isManual && respondMode !== 'immediately') {

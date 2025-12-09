@@ -1,138 +1,64 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // SignalRPrivateWorkflowClient.ts
-// A thin SignalR wrapper for use inside an n8n Trigger node.
+// Updated to use the new zero-dependency SignalRClient engine.
 
-import type { HubConnection } from '@microsoft/signalr';
-import {
-	HubConnectionBuilder,
-	LogLevel,
-	HttpTransportType,
-} from '@microsoft/signalr';
+import { SignalRClient, HubConnection } from './SignalRClient';
 import { jsonStringify } from 'n8n-workflow';
+import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
+import { PrivateWorkflowRequest } from './PrivateWorkflowRequest';
+import { PrivateWorkflowResponse } from './PrivateWorkflowResponse';
+import { SignalRClientConfig } from './SignalRClientConfig';
 
-// Node runtime needs a WebSocket implementation for SignalR:
-import NodeWebSocket from 'ws';
-if (typeof (globalThis as any).WebSocket === 'undefined') {
-	(globalThis as any).WebSocket = NodeWebSocket as unknown as typeof WebSocket;
-}
-
-export interface PrivateWorkflowRequest {
-	requestId?: string;
-	RequestId?: string;
-
-	method?: string;
-	Method?: string;
-
-	path?: string;
-	Path?: string;
-
-	payload?: string; // may be base64 or JSON string
-	Payload?: string;
-
-	headers?: Record<string, string>;
-	Headers?: Record<string, string>;
-
-	sessionId?: string;
-	SessionId?: string;
-}
-
-export interface PrivateWorkflowResponse {
-	RequestId: string;
-	SessionId?: string;
-	StatusCode: number;
-	Path?: string;
-	Headers?: Record<string, string>;
-	Payload?: string; // base64
-	IsFinal: boolean;
-}
-
-export interface SignalRClientConfig {
-	hubUrl: string;      // e.g., https://hub.n8ncloud.io/workflow
-	hubPath: string;     // e.g., mediasix/workflow-test
-	apiKey?: string;     // your app-level API key (not the SignalR bearer)
-	accessToken?: string; // optional: bearer presented to the hub
-	logLevel?: 'none' | 'info' | 'debug';
-  isSingleNodeRun?: boolean;
-
-	logger?: {
-		info: (msg: string, ...args: any[]) => void;
-		warn: (msg: string, ...args: any[]) => void;
-		error: (msg: string, ...args: any[]) => void;
-	};
-
-	/**
-	 * Called whenever the hub invokes "ExecutePrivateWorkflow".
-	 * Return value: an object whose contents will be returned back to the hub.
-	 * You can return either:
-	 *  - a plain JS object (we'll JSON.stringify and base64 it), or
-	 *  - a string (treated as the exact response body), or
-	 *  - a Buffer/Uint8Array (sent as-is in base64).
-	 */
-	onExecute: (req: {
-		request?: PrivateWorkflowRequest;
-		decodedJson?: any;      // parsed JSON if payload looked like JSON/base64->JSON
-		decodedText?: string;   // decoded payload string (if any)
-	}) => Promise<any> | any;
-
-	// On ConnectionError (invalid API key or no connection)
-  onConnectionError?: (error: unknown, context?: Record<string, unknown>) => void;
-}
+// ====================================================================
+// Helpers
+// ====================================================================
 
 function mask(s?: string, keep = 4): string {
 	if (!s) return '(empty)';
 	return s.length <= keep ? '*'.repeat(s.length) : s.slice(0, keep) + '…';
 }
 
-/**
- * If input looks like JSON, return it as-is.
- * If it looks like base64(JSON), base64-decode and return JSON string.
- * Else return raw string.
- */
-function decodePayloadString(payload?: string): string | null {
-	if (!payload) return null;
-	const s = String(payload).trim();
-
-	const looksJson =
-		(s.startsWith('{') && s.endsWith('}')) ||
-		(s.startsWith('[') && s.endsWith(']'));
-
-	if (looksJson) return s;
-
-	// try base64→utf8→JSON
-	try {
-		const utf8 = Buffer.from(s, 'base64').toString('utf8');
-		JSON.parse(utf8); // validate
-		return utf8;
-	} catch {
-		// not base64(JSON); just return raw
-		return s;
-	}
+function extractInlineText(payload?: PrivateWorkflowPayload): string | undefined {
+    if (!payload) return undefined;
+    if (payload.type !== 'inline') return undefined;
+    return payload.value;
 }
 
-function pick<T>(a: T | undefined, b: T | undefined): T | undefined {
-	return a !== undefined ? a : b;
+function extractInlineJson(text?: string): any | undefined {
+    if (!text) return undefined;
+    try {
+        return JSON.parse(text);
+    } catch {
+        return undefined;
+    }
 }
+
+// ====================================================================
+// SignalRPrivateWorkflowClient implementation
+// ====================================================================
 
 export class SignalRPrivateWorkflowClient {
-	private conn: HubConnection | null = null;
-	private readonly cfg: SignalRClientConfig;
-	private readonly urlWithPath: string;
 
-	constructor(cfg: SignalRClientConfig) {
-		this.cfg = cfg;
-		this.urlWithPath = `${cfg.hubUrl}?group=${encodeURIComponent(cfg.hubPath)}`;
-		this.log('info', 'SignalR client created: ' + cfg.hubUrl, {
-			hubUrl: cfg.hubUrl,
-			hubPath: cfg.hubPath,
-			apiKeySet: Boolean(cfg.apiKey),
-			tokenSet: Boolean(cfg.accessToken),
-			urlWithPath: this.urlWithPath,
-		});
-	}
+	private conn: HubConnection | null = null;
+	private client!: SignalRClient; // wrapper
+	private readonly cfg: SignalRClientConfig;
 
 	private onceResolvers: Array<() => void> = [];
 
-	// Add this method to the class
+	constructor(cfg: SignalRClientConfig) {
+		this.cfg = cfg;
+
+		this.log('info', 'SignalRPrivateWorkflowClient created', {
+			hubUrl: cfg.hubUrl,
+			hubPath: cfg.hubPath,
+			apiKeySet: Boolean(cfg.apiKey),
+			tokenSet: Boolean(cfg.accessToken)
+		});
+	}
+
+	// ------------------------------------------------------------------
+	// Manual Mode Waiter
+	// ------------------------------------------------------------------
 	public waitForNextMessage(timeoutMs = 60000): Promise<void> {
 		return new Promise<void>((resolve, reject) => {
 			let done = false;
@@ -143,10 +69,8 @@ export class SignalRPrivateWorkflowClient {
 				}
 			};
 
-			// Resolve on the *next* ExecutePrivateWorkflow we finish handling
 			this.onceResolvers.push(finish);
 
-			// Optional timeout
 			if (timeoutMs > 0) {
 				setTimeout(() => {
 					if (!done) {
@@ -158,223 +82,243 @@ export class SignalRPrivateWorkflowClient {
 		});
 	}
 
-	/** Start the connection (negotiate first, then fall back to direct WebSockets). */
+	// ------------------------------------------------------------------
+	// Start / Stop
+	// ------------------------------------------------------------------
 	public async start(): Promise<void> {
-		// Try negotiate path
+
+		// Build wrapper + get underlying HubConnection
+		this.client = new SignalRClient(
+			this.cfg.hubUrl,
+			this.cfg.apiKey ?? '',
+			this.cfg.hubPath
+		);
+
+		this.conn = this.client.raw;
+
+		// Wire event handlers BEFORE start()
+		this.wireHandlers();
+
 		try {
-			this.conn = this.buildConnection({
-				skipNegotiation: false,
-				transport: undefined,
+			await this.client.start();
+			this.log('info', 'SignalR connection established', {
+				connectionId: this.conn.connectionId
 			});
-			await this.conn.start();
-			this.log('info', 'Connected via negotiate', { connectionId: this.conn.connectionId });
+
 		} catch (e: any) {
-			this.log('warn', 'Negotiate failed; trying direct WebSockets…', e?.message || e);
-			// Fallback: direct WS
-			this.conn = this.buildConnection({
-				skipNegotiation: true,
-				transport: HttpTransportType.WebSockets,
+			this.cfg.onConnectionError?.(e, {
+				phase: 'start',
+				reason: 'Failed to establish SignalR connection'
 			});
-			await this.conn.start();
-			this.log('info', 'Connected via direct WebSockets', { connectionId: this.conn.connectionId });
+			throw e;
 		}
 
-		// Now that we're connected, wire events and register the client
-		this.wireHandlers();
+		// Now register this workflow path with the cloud hub
 		await this.registerClient();
-		this.log('info', 'Ready. Listening for ExecutePrivateWorkflow', { url: this.urlWithPath });
+
+		this.log('info', 'Ready for ExecutePrivateWorkflow messages');
 	}
 
-	/** Stop/close the connection. */
 	public async stop(): Promise<void> {
-		if (this.conn) {
-			try {
-				await this.conn.stop();
-			} finally {
-				this.conn = null;
-			}
+		if (this.client) {
+			await this.client.stop();
 			this.log('info', 'SignalR connection stopped');
 		}
+		this.conn = null;
 	}
 
-	// ----------------------- internals -----------------------
-
-	private buildConnection(opts: {
-		skipNegotiation: boolean;
-		transport?: HttpTransportType;
-	}): HubConnection {
-		const { accessToken, logLevel } = this.cfg;
-
-		const builder = new HubConnectionBuilder()
-			.withUrl(this.urlWithPath, {
-				accessTokenFactory: accessToken ? () => accessToken : undefined,
-				skipNegotiation: opts.skipNegotiation,
-				transport: opts.transport,
-			})
-			// backoff: immediate, 1s, 1.5s, 2s, 5s, 10s, 30s
-			.withAutomaticReconnect([0, 1000, 1500, 2000, 5000, 10000, 30000])
-			.configureLogging(
-				logLevel === 'debug'
-					? LogLevel.Debug
-					: logLevel === 'info'
-						? LogLevel.Information
-						: LogLevel.None,
-			);
-
-		return builder.build();
-	}
+	// ------------------------------------------------------------------
+	// Internal Handlers
+	// ------------------------------------------------------------------
 
 	private wireHandlers(): void {
 		if (!this.conn) return;
 
-		// Hub → client method
+		// ExecutePrivateWorkflow → our handler
 		this.conn.on('ExecutePrivateWorkflow', async (req: PrivateWorkflowRequest) => {
 			await this.handleExecute(req).catch((err) => {
-				this.log('error', 'Error in ExecutePrivateWorkflow handler', err);
+				this.log('error', 'Error in workflow handler', err);
 			});
 		});
 
+		// Reconnecting
 		this.conn.onreconnecting((err) => {
-			this.log('warn', 'Reconnecting…', err?.message || '');
+			this.log('warn', 'Reconnecting...', err?.message);
 		});
 
+		// Reconnected
 		this.conn.onreconnected(async (id) => {
 			this.log('info', 'Reconnected', { connectionId: id });
-			// Re-register so the server still associates your path/api-key
-			await this.registerClient().catch((err) => {
-				this.log('error', 'Re-registration after reconnect failed', err);
-			});
+
+			// Must re-register path after reconnect
+			await this.registerClient().catch((err) =>
+				this.log('error', 'Re-registration after reconnect failed', err)
+			);
 		});
 
+		// Closed
 		this.conn.onclose((err) => {
-			this.log('warn', 'Connection closed', err?.message || '');
+			this.log('warn', 'Connection closed', err?.message);
 		});
 	}
 
-	public async sendResponseToHub(requestId: string, body: any, path?: string): Promise<void> {
-		if (!this.conn) {
-			this.log('warn', 'Cannot send response: connection not active');
-			return;
-		}
-
-		try {
-			let bodyBytes: Buffer;
-			if (Buffer.isBuffer(body)) {
-				bodyBytes = body;
-			} else if (body instanceof Uint8Array) {
-				bodyBytes = Buffer.from(body);
-			} else if (typeof body === 'string') {
-				bodyBytes = Buffer.from(body, 'utf8');
-			} else {
-				// Assume plain object → JSON
-				bodyBytes = Buffer.from(JSON.stringify(body ?? {}), 'utf8');
-			}
-
-			const response: PrivateWorkflowResponse = {
-				RequestId: requestId,
-				StatusCode: 200,
-				Path: path,
-				Headers: { 'content-type': 'application/json' },
-				Payload: bodyBytes.toString('base64'),
-				IsFinal: true,
-			};
-
-			await this.conn.invoke('CompletePrivateWorkflow', response);
-			this.log('info', `Sent CompletePrivateWorkflow for ${requestId}`);
-		} catch (err: any) {
-			this.log('error', `Failed to send response for ${requestId}`, err);
-		}
-	}
-
+	// ------------------------------------------------------------------
+	// Register Workflow Path
+	// ------------------------------------------------------------------
 	private async registerClient(): Promise<void> {
 		if (!this.conn) return;
 
 		const payload = {
 			apiKey: this.cfg.apiKey ?? '',
-			path: this.cfg.hubPath,
+			path: this.cfg.hubPath
 		};
 
 		try {
 			const ack = await this.conn.invoke('RegisterPrivateWorkflow', payload);
-			this.log('info', 'Registration sent', { path: this.cfg.hubPath, apiKey: mask(this.cfg.apiKey) });
+			this.log('info', 'Registration sent', {
+				path: this.cfg.hubPath,
+				apiKey: mask(this.cfg.apiKey)
+			});
 
-			this.log('info', JSON.stringify(ack));
-
-			// Treat as failure if boolean false, or object with { success: false }
 			const failed =
 				ack === false ||
-				(ack && typeof ack === 'object' && 'success' in (ack as any) && (ack as any).success === false);
+				(ack && typeof ack === 'object' && 'success' in ack && ack.success === false);
 
 			if (failed) {
 				const err = new Error('API key invalid or registration rejected');
-				// Report up to parent; do NOT call the hub here
 				this.cfg.onConnectionError?.(err, {
 					phase: 'register',
-					reason: 'Failed to register this workflow with cloud hub.  Verify you have the correct API key.',
+					reason: 'Registration rejected by cloud hub',
 					payload,
-					ack,
+					ack
 				});
 				this.log('error', err.message, { payload, ack });
 				return;
 			}
 
 			if (ack) this.log('debug', 'Registration ack', ack);
+
 		} catch (e: any) {
-			// Report up to parent; do NOT call the hub here
 			this.cfg.onConnectionError?.(e, {
 				phase: 'register',
-				reason: 'invokeError',
-				payload,
-				op: 'invoke.RegisterPrivateWorkflow',
+				reason: 'invoke.RegisterPrivateWorkflow failed',
+				payload
 			});
 			this.log('error', 'Registration failed', e?.message || e);
-			throw e.message || e;
+			throw e;
 		}
 	}
 
+	// ------------------------------------------------------------------
+	// Handle Incoming Workflow Execution
+	// ------------------------------------------------------------------
 	private async handleExecute(req: PrivateWorkflowRequest): Promise<void> {
-		if (!this.conn) return;
+			if (!this.conn) return;
 
-		const requestId = pick(req.requestId, req.RequestId) ?? '';
-		const path = pick(req.path, req.Path) ?? '';
-		const payloadStr = pick(req.payload, req.Payload) ?? '';
+			const requestId = req.requestId ?? req.RequestId ?? '';
+			const path = req.path ?? req.Path ?? '';
 
-		this.log('info', 'ExecutePrivateWorkflow received', {
-			requestId,
-			path,
-		});
+			// New: get the payload object (from either casing)
+			const payload = req.payload ?? req.Payload;
+			const inlineText = extractInlineText(payload);
+			const inlineJson = extractInlineJson(inlineText);
 
-		// Attempt to produce helpful decoded views
-		const decodedText = decodePayloadString(payloadStr) ?? undefined;
-		let decodedJson: any | undefined = undefined;
-		if (decodedText) {
-			try {
-				decodedJson = JSON.parse(decodedText);
-			} catch {
-				// not JSON; ignore
-			}
-		}
+			this.log('info', 'ExecutePrivateWorkflow received', {
+					requestId,
+					path,
+					payloadType: payload?.type,
+			});
 
-		// Call user handler
- 		//const wasSingleNodeAtEntry = !!this.cfg.isSingleNodeRun;
-		var result = await this.cfg.onExecute({ request: req, decodedJson, decodedText });
+			// Call user handler with new fields
+			const result = await this.cfg.onExecute({
+					request: req,
+					inlineJson,
+					inlineText,
+					payload,
+			});
 
-		this.log('info', jsonStringify(result));
+			this.log('info', jsonStringify(result));
 
-		// ✅ Wake manual mode "waitForNextMessage" completion
-		const resolver = this.onceResolvers?.shift?.();
-		if (resolver) resolver();
-
+			// Manual-run resolver
+			const resolver = this.onceResolvers.shift();
+			if (resolver) resolver();
 	}
 
-	private log(level: 'info' | 'warn' | 'error' | 'debug' | 'none', msg: string, ...args: any[]) {
+	// ------------------------------------------------------------------
+	// Send Response
+	// ------------------------------------------------------------------
+
+	public async sendResponseToHub(requestId: string, body: any, path: string): Promise<void> {
+				if (!this.conn) {
+						this.log('warn', 'Cannot send response: connection not active');
+						return;
+				}
+
+				try {
+						const jsonString = JSON.stringify(body ?? {});
+						const byteLength = Buffer.byteLength(jsonString, 'utf8');
+
+						const payload: PrivateWorkflowPayload = {
+								type: 'inline',
+								value: jsonString,
+								length: byteLength,
+						};
+
+						const response: PrivateWorkflowResponse = {
+								requestId,
+								path,
+								payload,
+						};
+
+						await this.conn.invoke('CompletePrivateWorkflow', response);
+						this.log('info', `CompletePrivateWorkflow sent for ${requestId}`);
+				} catch (err: any) {
+						this.log('error', `Failed to send response for ${requestId}`, err);
+				}
+		}
+
+	// public async sendResponseToHub(requestId: string, body: any, path?: string): Promise<void> {
+	// 	if (!this.conn) {
+	// 		this.log('warn', 'Cannot send response: no active connection');
+	// 		return;
+	// 	}
+
+	// 	try {
+	// 		let bytes: Buffer;
+	// 		if (Buffer.isBuffer(body)) bytes = body;
+	// 		else if (body instanceof Uint8Array) bytes = Buffer.from(body);
+	// 		else if (typeof body === 'string') bytes = Buffer.from(body, 'utf8');
+	// 		else bytes = Buffer.from(JSON.stringify(body ?? {}), 'utf8');
+
+	// 		const response: PrivateWorkflowResponse = {
+	// 			RequestId: requestId,
+	// 			StatusCode: 200,
+	// 			Path: path,
+	// 			Headers: { 'content-type': 'application/json' },
+	// 			Payload: bytes.toString('base64'),
+	// 			IsFinal: true
+	// 		};
+
+	// 		await this.conn.invoke('CompletePrivateWorkflow', response);
+	// 		this.log('info', `Sent CompletePrivateWorkflow for ${requestId}`);
+
+	// 	} catch (err: any) {
+	// 		this.log('error', `Failed to send response for ${requestId}`, err);
+	// 	}
+	// }
+
+	// ------------------------------------------------------------------
+	// Logging passthrough
+	// ------------------------------------------------------------------
+	private log(level: 'info'|'warn'|'error'|'debug'|'none', msg:string, ...args:any[]) {
 		const l = this.cfg.logger;
+
 		if (level === 'none') return;
 		if (level === 'debug' && this.cfg.logLevel !== 'debug') return;
 
 		switch (level) {
-			case 'info': l?.info?.(msg, ...args); break;
-			case 'warn': l?.warn?.(msg, ...args); break;
+			case 'info':  l?.info?.(msg, ...args); break;
+			case 'warn':  l?.warn?.(msg, ...args); break;
 			case 'error': l?.error?.(msg, ...args); break;
 			case 'debug': l?.info?.(`[debug] ${msg}`, ...args); break;
 		}
