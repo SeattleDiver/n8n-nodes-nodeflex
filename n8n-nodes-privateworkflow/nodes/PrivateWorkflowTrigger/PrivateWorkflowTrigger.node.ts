@@ -12,8 +12,8 @@ import {
 //import crypto from 'crypto'
 import { SignalRPrivateWorkflowClient } from '../../library/SignalRPrivateWorkflowClient'
 import { PrivateWorkflowResponseRegistry } from '../../library/PrivateWorkflowResponseRegistry';
-import { HubUrlService } from '../../library/HubUrlService';
-
+import { HubUrlService } from "../../library/HubUrlService";
+import { WorkflowHubService } from "../../library/WorkflowHubService";
 
 export class PrivateWorkflowTrigger implements INodeType {
 
@@ -118,13 +118,20 @@ export class PrivateWorkflowTrigger implements INodeType {
 				self.logger.info("Using ApiKey: " + apiKey);
 
 				const hubService = new HubUrlService(hubBase);
-				const hubUrl: string = await hubService.getHubUrl(apiKey);
+				const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
+
+				const hubUrl = hubInfo?.hubUrl;
 				if (!hubUrl)
 				{
      	 		throw new NodeOperationError(this.getNode(), 'Hub URL is unavailable.  Hub service is down.');
 				}
-
-				self.logger.info(`Resolved Hub url: ${hubUrl}`);
+				const blobUrl = hubInfo?.blobStorageUrl;
+				if (!blobUrl)
+				{
+     	 		throw new NodeOperationError(this.getNode(), 'Blob URL is unavailable.  Hub service is down.');
+				}
+				self.logger.info(`Resolved Hub url : ${hubUrl}`);
+				self.logger.info(`Resolved Blob url: ${blobUrl}`);
 
         // const accessToken = creds?.accessToken;
         // const apiKey = 'AN9FMzZ4ZeHgNutVXJ9OdLYIyRha2ovIrTXJAEvjgD9nypxS'; // <-- for testing only
@@ -163,9 +170,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 												: raw ?? { text: inlineText ?? null };
 
 							  const requestId =
-										request?.requestId ??
-										request?.RequestId ??
-										'unknown';
+										request?.requestId ?? 'unknown';
 
   							// Get the respond mode selected in node UI
 								var respondMode = this.getNodeParameter('respond', 0) as string;
@@ -183,7 +188,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 								}
 
  								// const correlationId = crypto.randomUUID();
-								const correlationId = request?.correlationId ?? request?.CorrelationId;
+								const correlationId = request?.correlationId;
 								if (!correlationId || correlationId == "")
 								{
 									throw new NodeOperationError(this.getNode(), 'CorrelationId is required!');

@@ -211,14 +211,16 @@ class SignalRPrivateWorkflowClient {
             bodyBytes = Buffer.from(JSON.stringify(result !== null && result !== void 0 ? result : {}), 'utf8');
         }
         const response = {
-            RequestId: requestId,
-            SessionId: (_e = req.SessionId) !== null && _e !== void 0 ? _e : req.sessionId,
-            StatusCode: 200,
-            Path: path,
-            Headers: { 'content-type': 'application/json' },
-            Payload: bodyBytes.toString('base64'),
-            IsFinal: true,
-        };
+            requestId: requestId,
+            // sessionId: (_e = req.SessionId) !== null && _e !== void 0 ? _e : req.sessionId,
+            path: path,
+						payload: {
+								type: "inline",
+								value: encodedPayload,
+								length: encodedPayload.length,
+								isEncrypted: false
+						}
+					};
         await this.conn.invoke('CompletePrivateWorkflow', response);
         this.log('info', 'CompletePrivateWorkflow sent', { requestId });
         const resolver = this.onceResolvers.shift();

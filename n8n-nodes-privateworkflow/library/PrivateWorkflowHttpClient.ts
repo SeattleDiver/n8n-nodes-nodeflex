@@ -11,6 +11,7 @@ export interface PrivateWorkflowClientOptions {
  * You build the URL externally (including workflow path or query params).
  */
 export class PrivateWorkflowHttpClient {
+
 	constructor(private options: PrivateWorkflowClientOptions) {}
 
 	/**

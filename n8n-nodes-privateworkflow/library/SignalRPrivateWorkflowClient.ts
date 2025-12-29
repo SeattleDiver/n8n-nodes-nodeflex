@@ -4,6 +4,7 @@
 
 import { SignalRClient, HubConnection } from './SignalRClient';
 import { jsonStringify } from 'n8n-workflow';
+import { PrivateWorkflowAck } from './PrivateWorkflowAck';
 import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
 import { PrivateWorkflowRequest } from './PrivateWorkflowRequest';
 import { PrivateWorkflowResponse } from './PrivateWorkflowResponse';
@@ -168,13 +169,13 @@ export class SignalRPrivateWorkflowClient {
 	private async registerClient(): Promise<void> {
 		if (!this.conn) return;
 
-		const payload = {
+		const registerMessage = {
 			apiKey: this.cfg.apiKey ?? '',
 			path: this.cfg.hubPath
 		};
 
 		try {
-			const ack = await this.conn.invoke('RegisterPrivateWorkflow', payload);
+			const ack = await this.conn.invoke('RegisterPrivateWorkflow', registerMessage);
 			this.log('info', 'Registration attempt ' + this.cfg.hubPath, {
 				path: this.cfg.hubPath,
 				apiKey: mask(this.cfg.apiKey)
@@ -189,10 +190,10 @@ export class SignalRPrivateWorkflowClient {
 				this.cfg.onConnectionError?.(err, {
 					phase: 'register',
 					reason: 'Registration rejected by cloud hub',
-					payload,
+					registerMessage,
 					ack
 				});
-				this.log('error', err.message, { payload, ack });
+				this.log('error', err.message, { registerMessage, ack });
 				return;
 			}
 
@@ -202,7 +203,7 @@ export class SignalRPrivateWorkflowClient {
 			this.cfg.onConnectionError?.(e, {
 				phase: 'register',
 				reason: 'invoke.RegisterPrivateWorkflow failed',
-				payload
+				registerMessage
 			});
 			this.log('error', 'Registration failed', e?.message || e);
 			throw e;
@@ -215,11 +216,15 @@ export class SignalRPrivateWorkflowClient {
 	private async handleExecute(req: PrivateWorkflowRequest): Promise<void> {
 			if (!this.conn) return;
 
-			const requestId = req.requestId ?? req.RequestId ?? '';
-			const path = req.path ?? req.Path ?? '';
+			const correlationId = req.correlationId ?? '';
+			const requestId = req.requestId ?? '';
+			const path = req.path ?? '';
 
-			// New: get the payload object (from either casing)
-			const payload = req.payload ?? req.Payload;
+			// ACK immediately
+			await this.sendAckToHub(correlationId, requestId, path);
+
+			// Get the payload object
+			const payload = req.payload;
 			const inlineText = extractInlineText(payload);
 			const inlineJson = extractInlineJson(inlineText);
 
@@ -242,6 +247,35 @@ export class SignalRPrivateWorkflowClient {
 			// Manual-run resolver
 			const resolver = this.onceResolvers.shift();
 			if (resolver) resolver();
+	}
+
+	// ------------------------------------------------------------------
+	// Send ACK (message-based, first-wins)
+	// ------------------------------------------------------------------
+
+	public async sendAckToHub(correlationId: string, requestId: string, path: string): Promise<void> {
+			if (!this.conn) {
+					this.log('warn', 'Cannot send ACK: connection not active');
+					return;
+			}
+
+			try {
+					const ack: PrivateWorkflowAck = {
+							correlationId,
+							requestId,
+							path,
+							timestampUtc: new Date().toISOString(),
+					};
+
+					await this.conn.invoke('AcknowledgePrivateWorkflow', ack);
+
+					this.log('debug', `ACK sent for ${requestId}`, {
+							requestId,
+							path,
+					});
+			} catch (err: any) {
+					this.log('error', `Failed to send ACK for ${requestId}`, err);
+			}
 	}
 
 	// ------------------------------------------------------------------

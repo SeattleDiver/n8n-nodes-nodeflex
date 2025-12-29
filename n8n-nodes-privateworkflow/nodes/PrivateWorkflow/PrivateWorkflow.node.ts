@@ -3,9 +3,15 @@ import {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
-} from 'n8n-workflow';
-// import { randomUUID } from 'crypto';
+	NodeOperationError
+ } from 'n8n-workflow';
+
 import { PrivateWorkflowHttpClient } from '../../library/PrivateWorkflowHttpClient';
+import { HubUrlService } from "../../library/HubUrlService";
+import { WorkflowHubService } from "../../library/WorkflowHubService";
+import { PrivateWorkflowRequest } from "../../library/PrivateWorkflowRequest";
+// import { PrivateWorkflowPayload } from '../../library/PrivateWorkflowPayload';
+
 // import { PayloadEncryptor } from '../../library/PayloadEncryptor';
 
 export class PrivateWorkflow implements INodeType {
@@ -32,17 +38,17 @@ export class PrivateWorkflow implements INodeType {
 				displayName: 'Hub Environment',
 				name: 'hubUrl',
 				type: 'options',
-				default: 'http://localhost:5268/api/workflow',
+				default: 'http://localhost:5268',
 				description: 'Select the environment for the SignalR hub connection.',
 				options: [
 					{
 						name: 'Development',
-						value: 'http://localhost:5268/api/workflow',
+						value: 'http://localhost:5268',
 						description: 'Local development server.',
 					},
 					{
 						name: 'Production',
-						value: 'https://hub.n8ncloud.io/api/workflow',
+						value: 'https://hub.n8ncloud.io',
 						description: 'Cloud production server.',
 					},
 				],
@@ -67,6 +73,8 @@ export class PrivateWorkflow implements INodeType {
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
+
+		const self = this;
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
 
@@ -77,39 +85,64 @@ export class PrivateWorkflow implements INodeType {
 		for (let i = 0; i < items.length; i++) {
 			try {
 				// Extract parameters
-				const hubUrl = this.getNodeParameter('hubUrl', i) as string;
+				const hubBase = this.getNodeParameter('hubUrl', i) as string;
 				const hubPath = this.getNodeParameter('hubPath', i) as string;
 				const payload = this.getNodeParameter('payload', i) as object;
 
+				const hubService = new HubUrlService(hubBase);
+				const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
+
+				const hubUrl = hubInfo?.hubUrl;
+				if (!hubUrl)
+				{
+					throw new NodeOperationError(this.getNode(), 'Hub URL is unavailable.  Hub service is down.');
+				}
+				const blobUrl = hubInfo?.blobStorageUrl;
+				if (!blobUrl)
+				{
+					throw new NodeOperationError(this.getNode(), 'Blob URL is unavailable.  Hub service is down.');
+				}
+				const apiUrl = hubInfo?.apiUrl;
+				if (!apiUrl)
+				{
+					throw new NodeOperationError(this.getNode(), 'Endpoint URL is unavailable.  Hub service is down.');
+				}
+				self.logger.info(`Resolved API url : ${apiUrl}`);
+				self.logger.info(`Resolved Hub url : ${hubUrl}`);
+				self.logger.info(`Resolved Blob url: ${blobUrl}`);
+
 				// Construct target URL
-				const normalizedHubUrl = hubUrl.replace(/\/+$/, '');
-				const normalizedHubPath = hubPath.replace(/^\/+/, '');
-				const targetUrl = `${normalizedHubUrl}/${normalizedHubPath}`;
+				const normalizedUrl = apiUrl.replace(/\/+$/, '');
+				const normalizedPath = hubPath.replace(/^\/+/, '');
+				const targetUrl = `${normalizedUrl}/${normalizedPath}`;
 
 				// Base64 encode payload (already encrypted externally if needed)
-				const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
-
-				// Build PrivateWorkflowRequest (C# model)
-				const request = {
-					RequestId: crypto.randomUUID(),
-					Path: hubPath,
-					Headers: { 'x-source': 'n8ncloud' },
-					Payload: encodedPayload,
-					DeadlineUtc: new Date(Date.now() + 30000).toISOString(),
-					Tenant: null,
-					StreamResponse: false,
+				//const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
+				const encodedPayload = JSON.stringify(payload);
+				const request: PrivateWorkflowRequest = {
+					correlationId: crypto.randomUUID(),
+					requestId: crypto.randomUUID(),
+					path: hubPath,
+					payload: {
+							type: "inline",
+							value: JSON.stringify(encodedPayload),
+							length: encodedPayload.length,
+							isEncrypted: false
+					}
 				};
 
 				// Send request
 				const client = new PrivateWorkflowHttpClient({
 					apiKey,
-					verifySSL: !hubUrl.includes('localhost'),
+					verifySSL: !targetUrl.includes('localhost'),
 				});
 
-			  this.logger.info("Calling private workflow "+ hubPath + " @ Hub Url:" + hubUrl + " apiKey:" + apiKey);
+			  this.logger.info("Calling private workflow at " + targetUrl + " at API Url:" + apiUrl + " apiKey:" + apiKey);
 				const response = await client.post(targetUrl, request);
+				this.logger.info(JSON.stringify(response));
 
-				returnData.push({ json: { request, response } });
+				//returnData.push({ json: { request, response } });
+				returnData.push({ json: response });
 			} catch (error: any) {
 				if (this.continueOnFail()) {
 					returnData.push({ json: { error: error.message } });

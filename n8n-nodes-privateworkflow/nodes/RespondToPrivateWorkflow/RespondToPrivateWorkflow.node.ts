@@ -150,6 +150,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
+		this.logger.info(`getInputData() returns: ${JSON.stringify(items)}`)
 		const outputItems: INodeExecutionData[] = [];
 
 	  const correlationId = this.getNodeParameter('correlationId', 0) as string;
@@ -167,18 +168,32 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 		const respondWith = this.getNodeParameter('respondWith', 0) as string;
 
-		switch (respondWith) {
-			case 'allItems':
-				payload = items.map(it => it.json);
-				outputItems.push(...items);
-				break;
+		// Helper: extract the payload interior only
+		const extractPayload = (item: INodeExecutionData) => {
+			const { payload } = item.json as any;
+			return payload ?? null;
+		};
 
-			case 'firstItem':
-				payload = items[0]?.json ?? null;
-				outputItems.push(items[0]);
+		switch (respondWith) {
+
+			case 'allItems': {
+				// Return ONLY the payload interior for every input
+				payload = items.map(extractPayload);
+				outputItems.push(
+					...items.map(it => ({ json: extractPayload(it) as IDataObject }))
+				);
 				break;
+			}
+
+			case 'firstItem': {
+				const firstPayload = extractPayload(items[0]);
+				payload = firstPayload;
+				outputItems.push({ json: firstPayload as IDataObject });
+				break;
+			}
 
 			case 'json': {
+				// The user explicitly provides JSON → send it exactly
 				const jsonBody = this.getNodeParameter('responseData', 0) || {};
 				payload = jsonBody;
 				outputItems.push({ json: jsonBody as IDataObject });
@@ -186,6 +201,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			}
 
 			case 'text': {
+				// Simple text body
 				const text = String(this.getNodeParameter('responseText', 0));
 				payload = text;
 				outputItems.push({ json: { text } });
@@ -209,7 +225,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 				if (!binaryData) {
 					this.logger?.warn?.(
-						`[RespondToPrivateWorkflow] No binary data for correlationId=${correlationId}`
+						`[RespondToPrivateWorkflow] No binary data for correlation=${correlationId}`
 					);
 					payload = null;
 					outputItems.push({ json: {} });
@@ -226,6 +242,72 @@ export class RespondToPrivateWorkflow implements INodeType {
 				outputItems.push({ json: {} });
 				break;
 		}
+
+
+
+		// let payload: any;
+
+		// const respondWith = this.getNodeParameter('respondWith', 0) as string;
+
+		// switch (respondWith) {
+		// 	case 'allItems':
+		// 		payload = items.map(it => it.json);
+		// 		outputItems.push(...items);
+		// 		break;
+
+		// 	case 'firstItem':
+		// 		payload = items[0]?.json ?? null;
+		// 		outputItems.push(items[0]);
+		// 		break;
+
+		// 	case 'json': {
+		// 		const jsonBody = this.getNodeParameter('responseData', 0) || {};
+		// 		payload = jsonBody;
+		// 		outputItems.push({ json: jsonBody as IDataObject });
+		// 		break;
+		// 	}
+
+		// 	case 'text': {
+		// 		const text = String(this.getNodeParameter('responseText', 0));
+		// 		payload = text;
+		// 		outputItems.push({ json: { text } });
+		// 		break;
+		// 	}
+
+		// 	case 'binary': {
+		// 		const binaryMode = this.getNodeParameter('binaryMode', 0) as string;
+		// 		let binaryData;
+
+		// 		if (binaryMode === 'manual') {
+		// 			const binaryPropertyName = this.getNodeParameter('binaryPropertyName', 0);
+		// 			binaryData = items[0].binary?.[binaryPropertyName];
+		// 		} else {
+		// 			const binaryObj = items[0].binary;
+		// 			if (binaryObj && Object.keys(binaryObj).length > 0) {
+		// 				const firstKey = Object.keys(binaryObj)[0];
+		// 				binaryData = binaryObj[firstKey];
+		// 			}
+		// 		}
+
+		// 		if (!binaryData) {
+		// 			this.logger?.warn?.(
+		// 				`[RespondToPrivateWorkflow] No binary data for correlationId=${correlationId}`
+		// 			);
+		// 			payload = null;
+		// 			outputItems.push({ json: {} });
+		// 		} else {
+		// 			payload = binaryData;
+		// 			outputItems.push({ json: {}, binary: { data: binaryData } });
+		// 		}
+		// 		break;
+		// 	}
+
+		// 	case 'none':
+		// 	default:
+		// 		payload = null;
+		// 		outputItems.push({ json: {} });
+		// 		break;
+		// }
 
 		// ✅ Send a single response to the hub AFTER collecting payload
 		this.logger?.info?.(
