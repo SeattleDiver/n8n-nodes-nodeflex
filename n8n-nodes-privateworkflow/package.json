@@ -30,7 +30,8 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/PrivateWorkflowApi.credentials.js"
+      "dist/credentials/PrivateWorkflowApiPublicKey.credentials.js",
+      "dist/credentials/PrivateWorkflowApiPrivateKey.credentials.js"
     ],
     "nodes": [
       "dist/nodes/PrivateWorkflowTrigger/PrivateWorkflowTrigger.node.ts",

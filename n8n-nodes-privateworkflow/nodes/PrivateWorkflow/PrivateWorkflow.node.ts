@@ -29,30 +29,30 @@ export class PrivateWorkflow implements INodeType {
 		outputs: ['main'],
 		credentials: [
 			{
-				name: 'privateWorkflowApi', // must match your credentials class name
+				name: 'privateWorkflowApiPublicKey', // must match your credentials class name
 				required: true,
 			},
 		],
 		properties: [
-			{
-				displayName: 'Hub Environment',
-				name: 'hubUrl',
-				type: 'options',
-				default: 'http://localhost:5268',
-				description: 'Select the environment for the SignalR hub connection.',
-				options: [
-					{
-						name: 'Development',
-						value: 'http://localhost:5268',
-						description: 'Local development server.',
-					},
-					{
-						name: 'Production',
-						value: 'https://hub.n8ncloud.io',
-						description: 'Cloud production server.',
-					},
-				],
-			},
+			// {
+			// 	displayName: 'Hub Environment',
+			// 	name: 'hubUrl',
+			// 	type: 'options',
+			// 	default: 'http://localhost:5268',
+			// 	description: 'Select the environment for the SignalR hub connection.',
+			// 	options: [
+			// 		{
+			// 			name: 'Development',
+			// 			value: 'http://localhost:5268',
+			// 			description: 'Local development server.',
+			// 		},
+			// 		{
+			// 			name: 'Production',
+			// 			value: 'https://hub.n8ncloud.io',
+			// 			description: 'Cloud production server.',
+			// 		},
+			// 	],
+			// },
 			{
 				displayName: 'Workflow Name',
 				name: 'hubPath',
@@ -68,6 +68,29 @@ export class PrivateWorkflow implements INodeType {
 				type: 'json',
 				default: '{}',
 				description: 'The JSON payload to send to the Private Workflow.',
+			},
+			{
+				displayName: 'Wait for Response',
+				name: 'waitForResponse',
+				type: 'boolean',
+				default: false,
+				description: 'Wait for the private workflow to send a response (up to 15 seconds).',
+			},
+			{
+				displayName: 'Wait for Response Timeout (max 15 seconds)',
+				name: 'waitTimeout',
+				type: 'number',
+				default: 5,
+				typeOptions: {
+					minValue: 1,
+					maxValue: 15,
+				},
+				displayOptions: {
+					show: {
+						waitForResponse: [true],
+					},
+				},
+				description: 'Maximum time to wait for a workflow response.',
 			}
 		]
 	};
@@ -79,15 +102,22 @@ export class PrivateWorkflow implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 
 		// Get credentials
-		const creds = await this.getCredentials('privateWorkflowApi');
+		const creds = await this.getCredentials('privateWorkflowApiPublicKey');
 		const apiKey = creds.apiKey as string;
 
 		for (let i = 0; i < items.length; i++) {
 			try {
 				// Extract parameters
-				const hubBase = this.getNodeParameter('hubUrl', i) as string;
+				const hubBase = "https://hub.n8ncloud.io";
+				// const hubBase = this.getNodeParameter('hubUrl', i) as string;
 				const hubPath = this.getNodeParameter('hubPath', i) as string;
 				const payload = this.getNodeParameter('payload', i) as object;
+				const waitForResponse = this.getNodeParameter('waitForResponse', i) as boolean;
+
+				let waitTimeout = 0;
+				if (waitForResponse) {
+					waitTimeout = this.getNodeParameter('waitTimeout', i) as number;
+				}
 
 				const hubService = new HubUrlService(hubBase);
 				const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
@@ -107,8 +137,8 @@ export class PrivateWorkflow implements INodeType {
 				{
 					throw new NodeOperationError(this.getNode(), 'Endpoint URL is unavailable.  Hub service is down.');
 				}
-				self.logger.info(`Resolved API url : ${apiUrl}`);
-				self.logger.info(`Resolved Hub url : ${hubUrl}`);
+				self.logger.info(`Resolved  API url: ${apiUrl}`);
+				self.logger.info(`Resolved  Hub url: ${hubUrl}`);
 				self.logger.info(`Resolved Blob url: ${blobUrl}`);
 
 				// Construct target URL
@@ -128,7 +158,9 @@ export class PrivateWorkflow implements INodeType {
 							value: JSON.stringify(encodedPayload),
 							length: encodedPayload.length,
 							isEncrypted: false
-					}
+					},
+					waitForResponse: waitForResponse,
+					waitTimeout: waitTimeout
 				};
 
 				// Send request

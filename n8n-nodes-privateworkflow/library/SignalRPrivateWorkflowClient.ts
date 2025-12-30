@@ -264,7 +264,8 @@ export class SignalRPrivateWorkflowClient {
 							correlationId,
 							requestId,
 							path,
-							timestampUtc: new Date().toISOString(),
+							status: 'Started',
+							timestampUtc: new Date().toISOString()
 					};
 
 					await this.conn.invoke('AcknowledgePrivateWorkflow', ack);
@@ -281,7 +282,6 @@ export class SignalRPrivateWorkflowClient {
 	// ------------------------------------------------------------------
 	// Send Response
 	// ------------------------------------------------------------------
-
 	public async sendResponseToHub(correlationId: string, requestId: string, body: any, path: string): Promise<void> {
 				if (!this.conn) {
 						this.log('warn', 'Cannot send response: connection not active');

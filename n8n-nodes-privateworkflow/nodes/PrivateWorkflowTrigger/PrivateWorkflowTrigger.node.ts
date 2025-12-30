@@ -34,30 +34,30 @@ export class PrivateWorkflowTrigger implements INodeType {
 			outputs: ['main'],
 			credentials: [
 				{
-					name: 'privateWorkflowApi',
+					name: 'privateWorkflowApiPrivateKey',
 					required: true,
 				},
 			],
 			properties: [
-				{
-					displayName: 'Hub Environment',
-					name: 'hubUrl',
-					type: 'options',
-					default: 'http://localhost:5268',
-					description: 'Select the environment for the SignalR hub connection.',
-					options: [
-						{
-							name: 'Development',
-							value: 'http://localhost:5268',
-							description: 'Local development server.',
-						},
-						{
-							name: 'Production',
-							value: 'https://hub.n8ncloud.io',
-							description: 'Cloud production server.',
-						},
-					],
-				},
+				// {
+				// 	displayName: 'Hub Environment',
+				// 	name: 'hubUrl',
+				// 	type: 'options',
+				// 	default: 'http://localhost:5268',
+				// 	description: 'Select the environment for the SignalR hub connection.',
+				// 	options: [
+				// 		{
+				// 			name: 'Development',
+				// 			value: 'http://localhost:5268',
+				// 			description: 'Local development server.',
+				// 		},
+				// 		{
+				// 			name: 'Production',
+				// 			value: 'https://hub.n8ncloud.io',
+				// 			description: 'Cloud production server.',
+				// 		},
+				// 	],
+				// },
 				{
 					displayName: 'Workflow Name',
 					name: 'hubPath',
@@ -100,13 +100,14 @@ export class PrivateWorkflowTrigger implements INodeType {
     async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
 
 			  const self = this;
-        const hubBase = this.getNodeParameter('hubUrl', 0) as string;
+				const hubBase = "https://hub.n8ncloud.io";
+        //const hubBase = this.getNodeParameter('hubUrl', 0) as string;
         const hubPath = this.getNodeParameter('hubPath', 0) as string;
 
 			  self.logger.info("hubBase: " + hubBase);
 				self.logger.info("hubPath: " + hubPath);
 
-				const creds = (await this.getCredentials('privateWorkflowApi')) as {
+				const creds = (await this.getCredentials('privateWorkflowApiPrivateKey')) as {
       		apiKey?: string;
       		accessToken?: string;
     		} | null;

@@ -5,4 +5,6 @@ export interface PrivateWorkflowRequest {
 	requestId?: string;
 	path?: string;
 	payload?: PrivateWorkflowPayload;
+	waitForResponse: boolean;
+	waitTimeout: number
 }
