@@ -36,7 +36,8 @@
     "nodes": [
       "dist/nodes/PrivateWorkflowTrigger/PrivateWorkflowTrigger.node.ts",
       "dist/nodes/PrivateWorkflow/PrivateWorkflow.node.ts",
-      "dist/nodes/RespondToPrivateWorkflow/RespondToPrivateWorkflow.node.ts"
+      "dist/nodes/RespondToPrivateWorkflow/RespondToPrivateWorkflow.node.ts",
+      "dist/nodes/GetPrivateWorkflowResult/GetPrivateWorkflowResult.node.ts"
     ]
   },
   "devDependencies": {

@@ -47,6 +47,7 @@ export class HubUrlService {
 
             // blobStorageUrl is optional in case future versions add/remove it
 						const hubInfo: WorkflowHubService = {
+							accountPath: json.accountPath,
 							// Endpoints
 							apiUrl: json.apiUrl,
 							hubUrl: json.hubUrl,

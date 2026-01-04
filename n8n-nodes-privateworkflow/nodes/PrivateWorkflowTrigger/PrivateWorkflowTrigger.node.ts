@@ -39,33 +39,14 @@ export class PrivateWorkflowTrigger implements INodeType {
 				},
 			],
 			properties: [
-				// {
-				// 	displayName: 'Hub Environment',
-				// 	name: 'hubUrl',
-				// 	type: 'options',
-				// 	default: 'http://localhost:5268',
-				// 	description: 'Select the environment for the SignalR hub connection.',
-				// 	options: [
-				// 		{
-				// 			name: 'Development',
-				// 			value: 'http://localhost:5268',
-				// 			description: 'Local development server.',
-				// 		},
-				// 		{
-				// 			name: 'Production',
-				// 			value: 'https://hub.n8ncloud.io',
-				// 			description: 'Cloud production server.',
-				// 		},
-				// 	],
-				// },
 				{
 					displayName: 'Workflow Name',
-					name: 'hubPath',
+					name: 'workflowName',
 					type: 'string',
-					default: 'mediasix/workflow-test',
-					placeholder: 'e.g. mediasix/workflow-test',
+					default: '',
+					placeholder: 'e.g. my-workflow',
 					required: true,
-					description: 'The private workflow path to invoke.',
+					description: 'The name of the workflow (required)',
 				},
 				{
 					displayName: 'Respond',
@@ -101,11 +82,11 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 			  const self = this;
 				const hubBase = "https://hub.n8ncloud.io";
-        //const hubBase = this.getNodeParameter('hubUrl', 0) as string;
-        const hubPath = this.getNodeParameter('hubPath', 0) as string;
-
-			  self.logger.info("hubBase: " + hubBase);
-				self.logger.info("hubPath: " + hubPath);
+				const workflowName = this.getNodeParameter('workflowName', 0) as string;
+				if (!workflowName)
+				{
+					throw new NodeOperationError(this.getNode(), "Workflow name is required.");
+				}
 
 				const creds = (await this.getCredentials('privateWorkflowApiPrivateKey')) as {
       		apiKey?: string;
@@ -126,11 +107,15 @@ export class PrivateWorkflowTrigger implements INodeType {
 				{
      	 		throw new NodeOperationError(this.getNode(), 'Hub URL is unavailable.  Hub service is down.');
 				}
+				const hubPath = hubInfo.accountPath + "/" + workflowName;
 				const blobUrl = hubInfo?.blobStorageUrl;
 				if (!blobUrl)
 				{
      	 		throw new NodeOperationError(this.getNode(), 'Blob URL is unavailable.  Hub service is down.');
 				}
+			  self.logger.info("hubBase: " + hubBase);
+				self.logger.info("hubPath: " + hubPath);
+
 				self.logger.info(`Resolved Hub url : ${hubUrl}`);
 				self.logger.info(`Resolved Blob url: ${blobUrl}`);
 
@@ -232,6 +217,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 										// Send hub response right here
 										void client.sendResponseToHub(
 											correlationId,
+											'Running',
 											requestId,
 											{ ok: true, mode: respondMode, receivedAt: new Date().toISOString() },
 											hubPath,

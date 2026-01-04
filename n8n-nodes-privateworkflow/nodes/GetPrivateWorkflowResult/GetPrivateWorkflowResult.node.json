@@ -1,0 +1,18 @@
+{
+	"node": "n8n-nodes-base.httpbin",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Development", "Communication"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://www.n8ncloud.io/docs/credentials"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://www.n8ncloud.io/docs"
+			}
+		]
+	}
+}

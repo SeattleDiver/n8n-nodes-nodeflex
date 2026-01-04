@@ -26,7 +26,8 @@ export class PrivateWorkflow implements INodeType {
 		},
 		icon: 'file:cloud-network.svg',
 		inputs: ['main'],
-		outputs: ['main'],
+		outputs: ['main', 'main'],
+		outputNames: ['Acknowledged', 'Completed'],
 		credentials: [
 			{
 				name: 'privateWorkflowApiPublicKey', // must match your credentials class name
@@ -34,31 +35,12 @@ export class PrivateWorkflow implements INodeType {
 			},
 		],
 		properties: [
-			// {
-			// 	displayName: 'Hub Environment',
-			// 	name: 'hubUrl',
-			// 	type: 'options',
-			// 	default: 'http://localhost:5268',
-			// 	description: 'Select the environment for the SignalR hub connection.',
-			// 	options: [
-			// 		{
-			// 			name: 'Development',
-			// 			value: 'http://localhost:5268',
-			// 			description: 'Local development server.',
-			// 		},
-			// 		{
-			// 			name: 'Production',
-			// 			value: 'https://hub.n8ncloud.io',
-			// 			description: 'Cloud production server.',
-			// 		},
-			// 	],
-			// },
 			{
 				displayName: 'Workflow Name',
-				name: 'hubPath',
+				name: 'workflowName',
 				type: 'string',
 				default: '',
-				placeholder: 'e.g. mediasix/workflow-test',
+				placeholder: 'e.g. my-workflow',
 				required: true,
 				description: 'The private workflow path to invoke.',
 			},
@@ -99,7 +81,8 @@ export class PrivateWorkflow implements INodeType {
 
 		const self = this;
 		const items = this.getInputData();
-		const returnData: INodeExecutionData[] = [];
+		const ackData: INodeExecutionData[] = [];
+		const completedData: INodeExecutionData[] = [];
 
 		// Get credentials
 		const creds = await this.getCredentials('privateWorkflowApiPublicKey');
@@ -109,8 +92,11 @@ export class PrivateWorkflow implements INodeType {
 			try {
 				// Extract parameters
 				const hubBase = "https://hub.n8ncloud.io";
-				// const hubBase = this.getNodeParameter('hubUrl', i) as string;
-				const hubPath = this.getNodeParameter('hubPath', i) as string;
+				const workflowName = this.getNodeParameter('workflowName', i) as string;
+				if (!workflowName)
+				{
+					throw new NodeOperationError(this.getNode(), "Workflow name is required.");
+				}
 				const payload = this.getNodeParameter('payload', i) as object;
 				const waitForResponse = this.getNodeParameter('waitForResponse', i) as boolean;
 
@@ -127,6 +113,7 @@ export class PrivateWorkflow implements INodeType {
 				{
 					throw new NodeOperationError(this.getNode(), 'Hub URL is unavailable.  Hub service is down.');
 				}
+				const hubPath = hubInfo.accountPath + "/" + workflowName;
 				const blobUrl = hubInfo?.blobStorageUrl;
 				if (!blobUrl)
 				{
@@ -150,7 +137,7 @@ export class PrivateWorkflow implements INodeType {
 				//const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
 				const encodedPayload = JSON.stringify(payload);
 				const request: PrivateWorkflowRequest = {
-					correlationId: crypto.randomUUID(),
+					correlationId: crypto.randomUUID(),			// Note: the correlationId is generated in the hub
 					requestId: crypto.randomUUID(),
 					path: hubPath,
 					payload: {
@@ -173,18 +160,60 @@ export class PrivateWorkflow implements INodeType {
 				const response = await client.post(targetUrl, request);
 				this.logger.info(JSON.stringify(response));
 
-				//returnData.push({ json: { request, response } });
-				returnData.push({ json: response });
+				// --------------------------------------------------------------------
+				// Output the responses
+				// --------------------------------------------------------------------
+
+				// Defensive: treat 500+ as real failure
+				const statusCode = (response as any)?.statusCode;
+				if (typeof statusCode === 'number' && statusCode >= 500) {
+					throw new NodeOperationError(
+						this.getNode(),
+						`Hub error (${statusCode})`,
+						{ itemIndex: i }
+					);
+				}
+
+				// Always emit ACK (request accepted, correlationId exists)
+				ackData.push({ json: response });
+
+				// Route to Completed output when workflow is finished
+				const status = (response as any)?.status;
+
+				if (waitForResponse && status === 'Completed') {
+					completedData.push({ json: response });
+				}
+
 			} catch (error: any) {
+
+				// If user enabled "Continue On Fail", emit error as data
 				if (this.continueOnFail()) {
-					returnData.push({ json: { error: error.message } });
+
+					ackData.push({
+						json: {
+							error: true,
+							message: error.message,
+							name: error.name,
+							stack: error.stack,
+							itemIndex: i,
+						},
+					});
+
 					continue;
 				}
-				throw error;
+
+				// Otherwise, fail the node properly
+				if (error instanceof NodeOperationError) {
+					throw error;
+				}
+
+				throw new NodeOperationError(
+					this.getNode(),
+					error.message || 'Unexpected error executing private workflow',
+					{ itemIndex: i }
+				);
 			}
 		}
-
-		return [returnData];
+		return [ackData, completedData];
 	}
-
 }

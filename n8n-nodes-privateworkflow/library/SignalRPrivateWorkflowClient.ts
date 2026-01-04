@@ -282,7 +282,7 @@ export class SignalRPrivateWorkflowClient {
 	// ------------------------------------------------------------------
 	// Send Response
 	// ------------------------------------------------------------------
-	public async sendResponseToHub(correlationId: string, requestId: string, body: any, path: string): Promise<void> {
+	public async sendResponseToHub(correlationId: string, status: string, requestId: string, body: any, path: string): Promise<void> {
 				if (!this.conn) {
 						this.log('warn', 'Cannot send response: connection not active');
 						return;
@@ -299,6 +299,7 @@ export class SignalRPrivateWorkflowClient {
 						};
 
 						const response: PrivateWorkflowResponse = {
+							  status,
 							  correlationId,
 								requestId,
 								path,
