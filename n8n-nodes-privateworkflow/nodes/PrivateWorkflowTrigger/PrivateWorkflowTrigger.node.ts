@@ -14,6 +14,7 @@ import { SignalRPrivateWorkflowClient } from '../../library/SignalRPrivateWorkfl
 import { PrivateWorkflowResponseRegistry } from '../../library/PrivateWorkflowResponseRegistry';
 import { HubUrlService } from "../../library/HubUrlService";
 import { WorkflowHubService } from "../../library/WorkflowHubService";
+import { PrivateWorkflowPayload } from '../../library/PrivateWorkflowPayload';
 
 export class PrivateWorkflowTrigger implements INodeType {
 
@@ -181,28 +182,60 @@ export class PrivateWorkflowTrigger implements INodeType {
 								}
 
 								// Emit to workflow (starts a new execution in n8n)
-								let payload: IDataObject[];
+								let workflowItems: IDataObject[];
 								if (Array.isArray(base)) {
 									// base is an array → each element should be an object or item with a json
-									payload = base.map((i: any) => ('json' in i ? i.json : i));
+									workflowItems = base.map((i: any) => ('json' in i ? i.json : i));
 								} else if (typeof base === 'object' && base !== null) {
 									// single object → wrap it in an array
-									payload = [base as IDataObject];
+									workflowItems = [base as IDataObject];
 								} else {
 									// fallback for primitives (string, number, etc.)
-									payload = [{ value: base }];
+									workflowItems = [{ value: base }];
 								}
 
-								// 3️⃣ Build envelope object
-								const envelope = {
-									__correlationId: correlationId,
-									payload: payload,
-									meta: {
-										trigger: this.getNode().name || 'PrivateWorkflowTrigger',
-										timestamp: new Date().toISOString(),
+								// Decode the workflow request payload
+								const wfPayload = request.payload as PrivateWorkflowPayload;
+
+								let outItem: INodeExecutionData = {
+									json: {
+										__correlationId: correlationId,
+										meta: {
+											trigger: this.getNode().name,
+											timestamp: new Date().toISOString(),
+										},
 									},
 								};
-								const outItems: INodeExecutionData[] = this.helpers.returnJsonArray([envelope]);
+								if (wfPayload.type === 'inline' && wfPayload.encoding === 'base64') {
+									outItem.binary = {
+										file: {
+											data: wfPayload.value, // base64 (no re-encoding!)
+											fileName: 'data',
+											mimeType: 'application/octet-stream',
+										},
+									};
+								}
+								if (wfPayload.type === 'inline' && wfPayload.encoding !== 'base64') {
+									const jsonValue = JSON.parse(wfPayload.value);
+									workflowItems = Array.isArray(jsonValue)
+										? jsonValue
+										: [jsonValue];
+
+									outItem.json.workflowItems = workflowItems;
+								}
+								if (wfPayload.type === 'reference') {
+									// You decide how to fetch (HTTP, signed URL, etc.)
+									const response = await fetch(wfPayload.url);
+									const buffer = Buffer.from(await response.arrayBuffer());
+									outItem.binary = {
+										file: {
+											data: buffer.toString('base64'),
+											fileName: 'payload.bin',
+											mimeType: response.headers.get('content-type') ?? 'application/octet-stream',
+										},
+									};
+								}
+								this.emit([[outItem]]);
 
 								switch (respondMode) {
 
@@ -211,7 +244,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 									// ------------------------------------------------------------------------------------------------
 									case 'immediately': {
 
-										this.emit([outItems]);
+										// this.emit([[outItem]]);
 										self.logger?.info?.('[Trigger] Sending immediate response to hub...');
 
 										// Send hub response right here
@@ -235,8 +268,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 									case 'respondToPrivateWorkflow': {
 
 										// Create one output item
-										//const outItems: INodeExecutionData[] = this.helpers.returnJsonArray([envelope]);
-										this.emit([outItems]);
+										// this.emit([[outItem]]);
 
 										const entry = {
 											correlationId,

@@ -48,7 +48,7 @@ export class PrivateWorkflow implements INodeType {
 				displayName: 'Payload (JSON)',
 				name: 'payload',
 				type: 'json',
-				default: '{}',
+				default: '{{ $json }}',
 				description: 'The JSON payload to send to the Private Workflow.',
 			},
 			{
@@ -97,7 +97,60 @@ export class PrivateWorkflow implements INodeType {
 				{
 					throw new NodeOperationError(this.getNode(), "Workflow name is required.");
 				}
-				const payload = this.getNodeParameter('payload', i) as object;
+
+				const item = items[i];
+
+				let encodedPayload: string;
+				let payloadLength: number;
+
+				// ------------------------------------------------------------
+				// BINARY PAYLOAD
+				// ------------------------------------------------------------
+				if (item.binary && Object.keys(item.binary).length > 0) {
+
+					const binaryPropertyName = Object.keys(item.binary)[0];
+					const binary = item.binary[binaryPropertyName];
+
+					// n8n already stores binary.data as base64
+					encodedPayload = binary.data;
+
+					// Compute actual byte length from base64
+					payloadLength = Buffer.byteLength(binary.data, 'base64');
+
+					this.logger.info(
+						`Encoded binary payload as base64 (${payloadLength} bytes, ${binary.mimeType})`
+					);
+				}
+				// ------------------------------------------------------------
+				// JSON PAYLOAD
+				// ------------------------------------------------------------
+				else {
+					const payload = this.getNodeParameter('payload', i);
+
+					if (typeof payload === 'string') {
+						try {
+							JSON.parse(payload);
+							encodedPayload = payload;
+						}
+						catch {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Payload must be valid JSON. Do not mix JSON and expressions.',
+								{ itemIndex: i }
+							);
+						}
+					}
+					else {
+						encodedPayload = JSON.stringify(payload);
+					}
+
+					payloadLength = encodedPayload.length;
+
+					this.logger.info(
+						`Encoded JSON payload (${payloadLength} chars)`
+					);
+				}
+
 				const waitForResponse = this.getNodeParameter('waitForResponse', i) as boolean;
 
 				let waitTimeout = 0;
@@ -127,24 +180,23 @@ export class PrivateWorkflow implements INodeType {
 				self.logger.info(`Resolved  API url: ${apiUrl}`);
 				self.logger.info(`Resolved  Hub url: ${hubUrl}`);
 				self.logger.info(`Resolved Blob url: ${blobUrl}`);
+//				self.logger.info(`Resolved  Payload: ${encodedPayload}`);
 
 				// Construct target URL
 				const normalizedUrl = apiUrl.replace(/\/+$/, '');
 				const normalizedPath = hubPath.replace(/^\/+/, '');
 				const targetUrl = `${normalizedUrl}/${normalizedPath}`;
 
-				// Base64 encode payload (already encrypted externally if needed)
-				//const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
-				const encodedPayload = JSON.stringify(payload);
 				const request: PrivateWorkflowRequest = {
 					correlationId: crypto.randomUUID(),			// Note: the correlationId is generated in the hub
 					requestId: crypto.randomUUID(),
 					path: hubPath,
 					payload: {
 							type: "inline",
-							value: JSON.stringify(encodedPayload),
-							length: encodedPayload.length,
-							isEncrypted: false
+							value: encodedPayload,
+							length: payloadLength,
+							isEncrypted: false,
+							encoding: item.binary ? "base64" : "json"
 					},
 					waitForResponse: waitForResponse,
 					waitTimeout: waitTimeout

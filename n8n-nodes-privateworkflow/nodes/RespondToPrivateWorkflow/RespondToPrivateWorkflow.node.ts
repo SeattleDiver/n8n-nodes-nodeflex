@@ -14,7 +14,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 		group: ['output'],
 		version: 1,
 		description: 'Sends a response back to the Private Workflow Trigger via SignalR',
-		icon: 'file:cloud-network.svg',
+		icon: 'file:cloud-network-chevron-response.svg',
 		defaults: {
 			name: 'Respond to Private Workflow',
 			color: '#00c896',

@@ -17,7 +17,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		group: ['input'],
 		version: 1,
 		description: 'Retrieves the current status or result of a Private Workflow execution',
-		icon: 'file:cloud-network.svg',
+		icon: 'file:cloud-network-download-drum.svg',
 		defaults: {
 			name: 'Get Private Workflow Result',
 			color: '#00c896',
