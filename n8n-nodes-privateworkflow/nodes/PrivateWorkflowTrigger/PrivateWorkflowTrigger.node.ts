@@ -26,7 +26,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 			group: ['trigger'],
 			version: 1,
 			description: 'When a remote private workflow is executed',
-			icon: 'file:cloud-network.svg',
+			icon: 'file:cloud-network-chevron-request.svg',
 			defaults: {
 				name: 'Private Workflow Trigger',
 				color: '#00c896',

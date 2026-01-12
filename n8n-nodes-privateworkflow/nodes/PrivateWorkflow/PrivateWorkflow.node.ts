@@ -10,7 +10,7 @@ import { PrivateWorkflowHttpClient } from '../../library/PrivateWorkflowHttpClie
 import { HubUrlService } from "../../library/HubUrlService";
 import { WorkflowHubService } from "../../library/WorkflowHubService";
 import { PrivateWorkflowRequest } from "../../library/PrivateWorkflowRequest";
-// import { PrivateWorkflowPayload } from '../../library/PrivateWorkflowPayload';
+import { PrivateWorkflowResponseHydrator } from '../../library/PrivateWorkflowResponseHydrator';
 
 // import { PayloadEncryptor } from '../../library/PayloadEncryptor';
 
@@ -233,7 +233,13 @@ export class PrivateWorkflow implements INodeType {
 				const status = (response as any)?.status;
 
 				if (waitForResponse && status === 'Completed') {
-					completedData.push({ json: response });
+					const result = PrivateWorkflowResponseHydrator.hydrate(response, {
+						binaryPropertyName: 'file',
+					});
+
+					if (result.state === 'completed') {
+						completedData.push(...result.items);
+					}
 				}
 
 			} catch (error: any) {

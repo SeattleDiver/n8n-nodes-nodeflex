@@ -210,29 +210,44 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 			case 'binary': {
 				const binaryMode = this.getNodeParameter('binaryMode', 0) as string;
+
 				let binaryData;
+				let binaryPropertyName: string | undefined;
 
 				if (binaryMode === 'manual') {
-					const binaryPropertyName = this.getNodeParameter('binaryPropertyName', 0);
+					binaryPropertyName = this.getNodeParameter('binaryPropertyName', 0) as string;
 					binaryData = items[0].binary?.[binaryPropertyName];
 				} else {
 					const binaryObj = items[0].binary;
 					if (binaryObj && Object.keys(binaryObj).length > 0) {
-						const firstKey = Object.keys(binaryObj)[0];
-						binaryData = binaryObj[firstKey];
+						binaryPropertyName = Object.keys(binaryObj)[0];
+						binaryData = binaryObj[binaryPropertyName];
 					}
 				}
 
-				if (!binaryData) {
+				if (!binaryData || !binaryPropertyName) {
 					this.logger?.warn?.(
 						`[RespondToPrivateWorkflow] No binary data for correlation=${correlationId}`
 					);
+
 					payload = null;
-					outputItems.push({ json: {} });
+
+					outputItems.push({
+						json: { correlationId, status: 'Success' },
+					});
+
 				} else {
+					// 🔑 Preserve the binary exactly as n8n expects
 					payload = binaryData;
-					outputItems.push({ json: {}, binary: { data: binaryData } });
+
+					outputItems.push({
+						json: { correlationId, status: 'Success' },
+						binary: {
+							[binaryPropertyName]: binaryData,
+						},
+					});
 				}
+
 				break;
 			}
 
@@ -242,72 +257,6 @@ export class RespondToPrivateWorkflow implements INodeType {
 				outputItems.push({ json: {} });
 				break;
 		}
-
-
-
-		// let payload: any;
-
-		// const respondWith = this.getNodeParameter('respondWith', 0) as string;
-
-		// switch (respondWith) {
-		// 	case 'allItems':
-		// 		payload = items.map(it => it.json);
-		// 		outputItems.push(...items);
-		// 		break;
-
-		// 	case 'firstItem':
-		// 		payload = items[0]?.json ?? null;
-		// 		outputItems.push(items[0]);
-		// 		break;
-
-		// 	case 'json': {
-		// 		const jsonBody = this.getNodeParameter('responseData', 0) || {};
-		// 		payload = jsonBody;
-		// 		outputItems.push({ json: jsonBody as IDataObject });
-		// 		break;
-		// 	}
-
-		// 	case 'text': {
-		// 		const text = String(this.getNodeParameter('responseText', 0));
-		// 		payload = text;
-		// 		outputItems.push({ json: { text } });
-		// 		break;
-		// 	}
-
-		// 	case 'binary': {
-		// 		const binaryMode = this.getNodeParameter('binaryMode', 0) as string;
-		// 		let binaryData;
-
-		// 		if (binaryMode === 'manual') {
-		// 			const binaryPropertyName = this.getNodeParameter('binaryPropertyName', 0);
-		// 			binaryData = items[0].binary?.[binaryPropertyName];
-		// 		} else {
-		// 			const binaryObj = items[0].binary;
-		// 			if (binaryObj && Object.keys(binaryObj).length > 0) {
-		// 				const firstKey = Object.keys(binaryObj)[0];
-		// 				binaryData = binaryObj[firstKey];
-		// 			}
-		// 		}
-
-		// 		if (!binaryData) {
-		// 			this.logger?.warn?.(
-		// 				`[RespondToPrivateWorkflow] No binary data for correlationId=${correlationId}`
-		// 			);
-		// 			payload = null;
-		// 			outputItems.push({ json: {} });
-		// 		} else {
-		// 			payload = binaryData;
-		// 			outputItems.push({ json: {}, binary: { data: binaryData } });
-		// 		}
-		// 		break;
-		// 	}
-
-		// 	case 'none':
-		// 	default:
-		// 		payload = null;
-		// 		outputItems.push({ json: {} });
-		// 		break;
-		// }
 
 		// ✅ Send a single response to the hub AFTER collecting payload
 		this.logger?.info?.(
