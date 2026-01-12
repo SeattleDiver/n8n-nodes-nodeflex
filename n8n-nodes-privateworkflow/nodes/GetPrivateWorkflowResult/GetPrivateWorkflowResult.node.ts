@@ -125,7 +125,19 @@ export class GetPrivateWorkflowResult implements INodeType {
 				`Getting workflow results for {${correlationId}} at ${targetUrl}`
 			);
 
-			const response = await this.helpers.httpRequest({
+			// const response = await this.helpers.httpRequest({
+			// 	method: 'GET',
+			// 	url: targetUrl,
+			// 	headers: {
+			// 		'x-api-key': apiKey,
+			// 		'accept': 'application/json',
+			// 	},
+			// 	json: true,
+			// 	throwOnHttpError: false,
+			// 	resolveWithFullResponse: true
+			// });
+
+			const response = await this.helpers.request({
 				method: 'GET',
 				url: targetUrl,
 				headers: {
@@ -133,9 +145,14 @@ export class GetPrivateWorkflowResult implements INodeType {
 					'accept': 'application/json',
 				},
 				json: true,
+
+				// 🔑 THESE ARE SUPPORTED HERE
+				simple: false,
+				resolveWithFullResponse: true,
 			});
 
-			const status: string | undefined = response?.status;
+			const body = response.body;
+			const status: string | undefined = body?.status;
 
 			if (!status) {
 				throw new NodeOperationError(
@@ -144,11 +161,10 @@ export class GetPrivateWorkflowResult implements INodeType {
 					{ itemIndex: i }
 				);
 			}
-
 			// --------------------------------------------------------
 			// Pending states
 			// --------------------------------------------------------
-			if (status === 'Queued' || status === 'Running' || status === 'Pending') {
+			else if (status === 'Queued' || status === 'Running' || status === 'Pending') {
 				pending.push({
 					json: {
 						status,
@@ -157,142 +173,97 @@ export class GetPrivateWorkflowResult implements INodeType {
 				});
 				continue;
 			}
+			// ------------------------------------------------------------
+			// HANDLE RATE LIMIT (429) FIRST
+			// ------------------------------------------------------------
+			else if (status == "rate_limited") {
+					// Return a normal item with the rate limit message.  User can get the retryAfterMs and use that to wait before retrying
+					pending.push({
+							json: {
+									status: 'rate_limited',
+									correlationId,
+									message:
+											body.message ??
+											'Polling too frequently for this workflow execution',
+											retryAfterMs: body.retryAfterMs,
+							},
+					});
 
-			if (status !== 'Completed') {
+					this.logger.warn(`429 Too Many Requests for {${correlationId}}, rate limited.`);
+					throw new NodeOperationError(
+						this.getNode(),
+						`429 Too Many Requests for {${correlationId}}, rate limited.  Polling limit is 1500ms`,
+						{ itemIndex: i }
+					);
+			}
+			else if (status !== 'Completed') {
 				throw new NodeOperationError(
 					this.getNode(),
 					`Unknown workflow status: ${status}`,
 					{ itemIndex: i }
 				);
 			}
+			else if (status === 'Completed') {
+				// --------------------------------------------------------
+				// Completed → hydrate payload
+				// --------------------------------------------------------
+				const result = PrivateWorkflowResponseHydrator.hydrate(body, {
+					binaryPropertyName: 'file',
+				});
 
-			// --------------------------------------------------------
-			// Completed → hydrate payload
-			// --------------------------------------------------------
-			const result = PrivateWorkflowResponseHydrator.hydrate(response, {
-				binaryPropertyName: 'file',
-			});
-
-			if (result.state === 'completed') {
-				completed.push(...result.items);
-			} else {
-				pending.push(...result.items);
+				if (result.state === 'completed') {
+					completed.push(...result.items);
+				} else {
+					pending.push(...result.items);
+				}
+				continue;
 			}
-
-
-			// const p = response.payload;
-
-			// let parsed: any = undefined;
-			// let isJson = false;
-
-			// if (p?.type === 'inline' && typeof p.value === 'string') {
-			// 	try {
-			// 		parsed = JSON.parse(p.value);
-			// 		isJson = true;
-			// 	} catch {
-			// 		parsed = p.value; // plain text
-			// 	}
-			// }
-
-			// // --------------------------------------------------------
-			// // Binary payload → hydrate n8n binary
-			// // --------------------------------------------------------
-			// if (
-			// 	isJson &&
-			// 	parsed &&
-			// 	typeof parsed === 'object' &&
-			// 	!Array.isArray(parsed) &&
-			// 	typeof parsed.data === 'string' &&
-			// 	typeof parsed.mimeType === 'string'
-			// ) {
-			// 	const binaryPropertyName = 'file'; // contract with RespondToPrivateWorkflow
-
-			// 	completed.push({
-			// 		json: {
-			// 			status,
-			// 			correlationId,
-			// 		},
-			// 		binary: {
-			// 			[binaryPropertyName]: parsed,
-			// 		},
-			// 	});
-
-			// 	continue;
-			// }
-
-			// // --------------------------------------------------------
-			// // JSON payload → hydrate JSON
-			// // --------------------------------------------------------
-			// if (isJson) {
-			// 	if (Array.isArray(parsed)) {
-			// 		for (const element of parsed) {
-			// 			completed.push({
-			// 				json: {
-			// 					status,
-			// 					correlationId,
-			// 					...(element ?? {}),
-			// 				},
-			// 			});
-			// 		}
-			// 	} else {
-			// 		completed.push({
-			// 			json: {
-			// 				status,
-			// 				correlationId,
-			// 				...(parsed ?? {}),
-			// 			},
-			// 		});
-			// 	}
-			// 	continue;
-			// }
-
-			// // --------------------------------------------------------
-			// // Text payload → return clean text
-			// // --------------------------------------------------------
-			// if (typeof parsed === 'string') {
-			// 	completed.push({
-			// 		json: {
-			// 			status,
-			// 			correlationId,
-			// 			text: parsed,
-			// 		},
-			// 	});
-			// 	continue;
-			// }
-
-			// --------------------------------------------------------
-			// No payload → minimal output
-			// --------------------------------------------------------
-			completed.push({
-				json: {
-					status,
-					correlationId,
-				},
-			});
+			else
+			{
+				// --------------------------------------------------------
+				// No payload → minimal output
+				// --------------------------------------------------------
+				completed.push({
+					json: {
+						status,
+						correlationId,
+					},
+				});
+			}
 
 		} catch (err) {
 
+			// ------------------------------------------------------------
+			// CONTINUE ON FAIL (generic)
+			// ------------------------------------------------------------
 			if (this.continueOnFail()) {
-				pending.push({
-					json: {
-						correlationId,
-						error: true,
-						message: err.message ?? err,
-						itemIndex: i,
-					},
-				});
-				continue;
+					pending.push({
+							json: {
+									correlationId,
+									error: true,
+									message: err.message ?? err,
+									itemIndex: i,
+							},
+					});
+					continue;
 			}
 
+			// ------------------------------------------------------------
+			// RE-THROW KNOWN NODE ERRORS
+			// ------------------------------------------------------------
 			if (err instanceof NodeOperationError) {
-				throw err;
+					throw err;
 			}
 
+			// ------------------------------------------------------------
+			// FALLBACK: UNKNOWN ERROR
+			// ------------------------------------------------------------
 			throw new NodeOperationError(
-				this.getNode(),
-				err.message || 'Unexpected error retrieving workflow result',
-				{ itemIndex: i }
+					this.getNode(),
+					err.message || 'Unexpected error retrieving workflow result',
+					{ itemIndex: i }
 			);
+
 		}
 	}
 

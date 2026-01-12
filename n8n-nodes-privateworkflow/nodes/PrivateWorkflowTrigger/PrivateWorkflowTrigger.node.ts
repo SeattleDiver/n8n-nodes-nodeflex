@@ -5,7 +5,6 @@ import {
 	ITriggerResponse,
 	NodeOperationError,
 	jsonStringify,
-	IDataObject,
 	INodeExecutionData
 } from 'n8n-workflow';
 //import crypto, { OneShotDigestOptionsWithBufferEncoding } from 'crypto'
@@ -181,29 +180,12 @@ export class PrivateWorkflowTrigger implements INodeType {
 									throw new NodeOperationError(this.getNode(), 'CorrelationId is required!');
 								}
 
-								// Emit to workflow (starts a new execution in n8n)
-								let workflowItems: IDataObject[];
-								if (Array.isArray(base)) {
-									// base is an array → each element should be an object or item with a json
-									workflowItems = base.map((i: any) => ('json' in i ? i.json : i));
-								} else if (typeof base === 'object' && base !== null) {
-									// single object → wrap it in an array
-									workflowItems = [base as IDataObject];
-								} else {
-									// fallback for primitives (string, number, etc.)
-									workflowItems = [{ value: base }];
-								}
-
 								// Decode the workflow request payload
 								const wfPayload = request.payload as PrivateWorkflowPayload;
 
 								let outItem: INodeExecutionData = {
 									json: {
-										__correlationId: correlationId,
-										meta: {
-											trigger: this.getNode().name,
-											timestamp: new Date().toISOString(),
-										},
+										__correlationId: correlationId
 									},
 								};
 								if (wfPayload.type === 'inline' && wfPayload.encoding === 'base64') {
@@ -217,11 +199,23 @@ export class PrivateWorkflowTrigger implements INodeType {
 								}
 								if (wfPayload.type === 'inline' && wfPayload.encoding !== 'base64') {
 									const jsonValue = JSON.parse(wfPayload.value);
-									workflowItems = Array.isArray(jsonValue)
-										? jsonValue
-										: [jsonValue];
 
-									outItem.json.workflowItems = workflowItems;
+									// Block arrays.  User must wrap them.
+									if (Array.isArray(jsonValue)) {
+										throw new NodeOperationError(
+											this.getNode(),
+											'Private Workflow Trigger does not accept array payloads.  Arrays must be wrapped in the Execute Private Workflow node.'
+										);
+									}
+									if (typeof jsonValue !== 'object' || jsonValue === null || Array.isArray(jsonValue)) {
+										throw new NodeOperationError(
+											this.getNode(),
+											'Private workflow payload must be a single JSON object'
+										);
+									}
+
+									// Emit exactly what was sent to the hub
+									Object.assign(outItem.json, jsonValue);
 								}
 								if (wfPayload.type === 'reference') {
 									// You decide how to fetch (HTTP, signed URL, etc.)
@@ -370,6 +364,16 @@ export class PrivateWorkflowTrigger implements INodeType {
 					}
 				};
 
+				// const normalizeToArray = (value: any): IDataObject[] => {
+				// 	if (Array.isArray(value)) {
+				// 		return value.map(v => ('json' in v ? v.json : v));
+				// 	}
+				// 	if (typeof value === 'object' && value !== null) {
+				// 		return [value];
+				// 	}
+				// 	return [{ value }];
+				// };
+
 				//
         // Manual execution in the editor:
 				//
@@ -430,4 +434,5 @@ export class PrivateWorkflowTrigger implements INodeType {
 						manualTriggerFunction: manualTriggerFunction.bind(this),
 				};
     }
+
 }

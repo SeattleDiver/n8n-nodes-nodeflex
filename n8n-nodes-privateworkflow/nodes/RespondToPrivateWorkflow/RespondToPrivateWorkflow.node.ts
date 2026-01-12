@@ -3,17 +3,18 @@ import {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
-	IDataObject
+	IDataObject,
+	NodeOperationError
 } from 'n8n-workflow';
 import { PrivateWorkflowResponseRegistry } from '../../library/PrivateWorkflowResponseRegistry';
 
 export class RespondToPrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Respond to Private Workflow',
+		displayName: 'Respond to Private Workflow 0004',
 		name: 'respondToPrivateWorkflow',
 		group: ['output'],
 		version: 1,
-		description: 'Sends a response back to the Private Workflow Trigger via SignalR',
+		description: 'Sends a response back to the Private Workflow Trigger via SignalR RESPOND NODE - NEW DEFAULT LOADED',
 		icon: 'file:cloud-network-chevron-response.svg',
 		defaults: {
 			name: 'Respond to Private Workflow',
@@ -66,11 +67,11 @@ export class RespondToPrivateWorkflow implements INodeType {
 			{
 				displayName: 'Response Body',
 				name: 'responseData',
-				type: 'json',
+				type: 'string',
 				typeOptions: {
-					alwaysOpenEditWindow: true,
+					rows: 4
 				},
-				default: `={{ $json }}`,
+				default: `{{ $json }}`,
 				description: 'The JSON to send in the response',
 				displayOptions: {
 					show: {
@@ -193,12 +194,98 @@ export class RespondToPrivateWorkflow implements INodeType {
 			}
 
 			case 'json': {
-				// The user explicitly provides JSON → send it exactly
-				const jsonBody = this.getNodeParameter('responseData', 0) || {};
-				payload = jsonBody;
-				outputItems.push({ json: jsonBody as IDataObject });
+				const raw = this.getNodeParameter('responseData', 0);
+
+				let parsed: IDataObject;
+
+				// 1️⃣ If n8n already gave us an object, use it
+				if (raw !== null && typeof raw === 'object' && !Array.isArray(raw)) {
+					// Deep clone to break n8n references
+					parsed = JSON.parse(JSON.stringify(raw));
+				}
+
+				// 2️⃣ If it's a string, try to parse it as JSON
+				else if (typeof raw === 'string') {
+					const trimmed = raw.trim();
+
+					if (!trimmed) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'Response Body is empty; expected valid JSON'
+						);
+					}
+
+					try {
+						const value = JSON.parse(trimmed);
+
+						if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+							throw new NodeOperationError(this.getNode(), 'Parsed JSON is not an object');
+						}
+
+						parsed = value as IDataObject;
+					} catch {
+						throw new NodeOperationError(
+							this.getNode(),
+							'Response Body must contain valid JSON (object)'
+						);
+					}
+				}
+
+				// 3️⃣ Anything else is unsupported
+				else {
+					throw new NodeOperationError(
+						this.getNode(),
+						`Response Body resolved to unsupported type (${typeof raw}); expected JSON object`
+					);
+				}
+
+				// 🔑 Canonical payload (SignalR)
+				payload = parsed;
+
+				// 🔑 Canonical output (n8n)
+				outputItems.push({ json: parsed });
+
 				break;
 			}
+
+
+			// case 'json': {
+			// 	const raw = this.getNodeParameter('responseData', 0);
+
+			// 	if (typeof raw !== 'string') {
+			// 		throw new NodeOperationError(
+			// 			this.getNode(),
+			// 			'Response Body must be a JSON string'
+			// 		);
+			// 	}
+
+			// 	let parsed: IDataObject;
+
+			// 	try {
+			// 		parsed = JSON.parse(raw);
+			// 	} catch {
+			// 		throw new NodeOperationError(
+			// 			this.getNode(),
+			// 			'Response Body must contain valid JSON'
+			// 		);
+			// 	}
+
+			// 	// 🔑 parsed object becomes the payload
+			// 	payload = parsed;
+
+			// 	// 🔑 n8n output uses the SAME parsed object
+			// 	outputItems.push({ json: parsed });
+
+			// 	break;
+			// }
+
+			// case 'json': {
+			// 	// The user explicitly provides JSON → send it exactly
+			// 	const jsonBody = this.getNodeParameter('responseData', 0) || {};
+			// 	payload = jsonBody;
+			// 	outputItems.push({ json: jsonBody as IDataObject });
+			// 	break;
+			// }
 
 			case 'text': {
 				// Simple text body
@@ -258,12 +345,39 @@ export class RespondToPrivateWorkflow implements INodeType {
 				break;
 		}
 
-		// ✅ Send a single response to the hub AFTER collecting payload
+		// Canonical payload (this is the truth)
+		let basePayload: IDataObject | null = null;
+
+		if (payload === null) {
+			basePayload = null;
+		} else if (typeof payload === 'string') {
+			// Last-chance parse (defensive)
+			try {
+				basePayload = JSON.parse(payload);
+			} catch {
+				throw new NodeOperationError(this.getNode(), '[RespondToPrivateWorkflow] Payload resolved to string; expected object');
+			}
+		} else if (typeof payload === 'object') {
+			// Deep clone to break n8n refs
+			basePayload = JSON.parse(JSON.stringify(payload));
+		} else {
+			throw new NodeOperationError(this.getNode(), `[RespondToPrivateWorkflow] Invalid payload type: ${typeof payload}`);
+		}
+
+		// ------------------------------------------------------------------------------------
+		// Send a single response to the hub AFTER collecting payload
+		// ------------------------------------------------------------------------------------
 		this.logger?.info?.(
 			`[RespondToPrivateWorkflow] Sending response → req=${entry.requestId}, corr=${correlationId}, mode=${respondWith}`
 		);
 
-		await entry.client.sendResponseToHub(entry.correlationId, 'Completed', entry.requestId, payload, entry.path);
+		await entry.client.sendResponseToHub(
+			entry.correlationId,
+			'Completed',
+			entry.requestId,
+			basePayload,
+			entry.path
+		);
 
 		// ✅ Cleanup once
 		clearTimeout(entry.timeout);

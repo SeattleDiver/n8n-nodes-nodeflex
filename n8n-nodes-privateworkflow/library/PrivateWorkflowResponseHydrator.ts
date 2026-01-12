@@ -12,14 +12,14 @@ export interface HydrationResult {
 export class PrivateWorkflowResponseHydrator {
 
   static hydrate(
-    response: any,
+    body: any,
     options: HydrationOptions = {}
   ): HydrationResult {
 
     const binaryKey = options.binaryPropertyName ?? 'file';
 
-    const status: string | undefined = response?.status;
-    const correlationId: string | undefined = response?.correlationId;
+    const status: string | undefined = body?.status;
+    const correlationId: string | undefined = body?.correlationId;
 
     if (!status) {
       throw new Error('Response missing status');
@@ -49,7 +49,7 @@ export class PrivateWorkflowResponseHydrator {
       throw new Error(`Unknown workflow status: ${status}`);
     }
 
-    const payload = response?.payload;
+    const payload = body?.payload;
     const items: INodeExecutionData[] = [];
 
     // ------------------------------------------------------------
