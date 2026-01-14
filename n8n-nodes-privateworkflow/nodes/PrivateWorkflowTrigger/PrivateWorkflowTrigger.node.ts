@@ -72,6 +72,16 @@ export class PrivateWorkflowTrigger implements INodeType {
 						},
 					],
 				},
+				{
+					displayName: 'Encrypt Workflow Payload in Transit',
+					name: 'encryptPayload',
+					type: 'boolean',
+					default: false,
+					description:
+						'Encrypt the workflow payload in transit between n8n and the Private Workflow. Configure the private key in the credential.',
+					hint:
+					  'When enabled, all requests and responses for this execution are automatically encrypted and decrypted. No additional configuration is required on downstream Private Workflow nodes.',
+				}
 			],
 		};
 
@@ -204,7 +214,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 									if (Array.isArray(jsonValue)) {
 										throw new NodeOperationError(
 											this.getNode(),
-											'Private Workflow Trigger does not accept array payloads.  Arrays must be wrapped in the Execute Private Workflow node.'
+											'Private Workflow Trigger does not accept array payloads.  Arrays must be wrapped in the Execute Private Workflow node. '
 										);
 									}
 									if (typeof jsonValue !== 'object' || jsonValue === null || Array.isArray(jsonValue)) {
@@ -248,6 +258,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 											requestId,
 											{ ok: true, mode: respondMode, receivedAt: new Date().toISOString() },
 											hubPath,
+											"json"
 										).catch(err =>
 											self.logger?.warn?.(`[Trigger] sendResponseToHub error: ${err}`)
 										);

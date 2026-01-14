@@ -9,6 +9,7 @@ import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
 import { PrivateWorkflowRequest } from './PrivateWorkflowRequest';
 import { PrivateWorkflowResponse } from './PrivateWorkflowResponse';
 import { SignalRClientConfig } from './SignalRClientConfig';
+import type { WorkflowPayloadEncoding } from './WorkflowPayloadEncoding';
 
 // ====================================================================
 // Helpers
@@ -282,36 +283,83 @@ export class SignalRPrivateWorkflowClient {
 	// ------------------------------------------------------------------
 	// Send Response
 	// ------------------------------------------------------------------
-	public async sendResponseToHub(correlationId: string, status: string, requestId: string, body: any, path: string): Promise<void> {
-				if (!this.conn) {
-						this.log('warn', 'Cannot send response: connection not active');
-						return;
-				}
+	public async sendResponseToHub(
+		correlationId: string,
+		status: string,
+		requestId: string,
+		body: any,
+		path: string,
+		encoding: WorkflowPayloadEncoding,
+	): Promise<void> {
 
-				try {
-						const jsonString = JSON.stringify(body ?? {});
-						const byteLength = Buffer.byteLength(jsonString, 'utf8');
-
-						const payload: PrivateWorkflowPayload = {
-								type: 'inline',
-								value: jsonString,
-								length: byteLength,
-						};
-
-						const response: PrivateWorkflowResponse = {
-							  status,
-							  correlationId,
-								requestId,
-								path,
-								payload,
-						};
-
-						await this.conn.invoke('CompletePrivateWorkflow', response);
-						this.log('info', `CompletePrivateWorkflow sent for ${requestId}`);
-				} catch (err: any) {
-						this.log('error', `Failed to send response for ${requestId}`, err);
-				}
+		if (!this.conn) {
+			this.log('warn', 'Cannot send response: connection not active');
+			return;
 		}
+
+		try {
+			let value: string;
+
+			// ------------------------------------------------------------
+			// Encode payload correctly (NO double-encoding)
+			// ------------------------------------------------------------
+			switch (encoding) {
+
+				case 'none':
+					value = ""; // 🔑 NO stringify
+					break;
+
+				case 'text': {
+					if (typeof body !== 'string') {
+						throw new Error('Text payload must be a string');
+					}
+					value = body; // 🔑 NO stringify
+					break;
+				}
+
+				case 'json': {
+					// Objects or arrays only
+					value = JSON.stringify(body ?? {});
+					break;
+				}
+
+				case 'base64': {
+					if (typeof body !== 'string') {
+						throw new Error('Base64 payload must be a string');
+					}
+					value = body; // already base64
+					break;
+				}
+
+				default: {
+					throw new Error(`Unsupported payload encoding: ${encoding}`);
+				}
+			}
+
+			const byteLength = Buffer.byteLength(value, 'utf8');
+
+			const payload: PrivateWorkflowPayload = {
+				type: 'inline',
+				value,
+				length: byteLength,
+				encoding,
+			};
+
+			const response: PrivateWorkflowResponse = {
+				status,
+				correlationId,
+				requestId,
+				path,
+				payload,
+			};
+
+			await this.conn.invoke('CompletePrivateWorkflow', response);
+
+			this.log('info', `CompletePrivateWorkflow sent for ${requestId}`);
+		} catch (err: any) {
+			this.log('error', `Failed to send response for ${requestId}, ${err}`);
+		}
+	}
 
 	// ------------------------------------------------------------------
 	// Logging passthrough

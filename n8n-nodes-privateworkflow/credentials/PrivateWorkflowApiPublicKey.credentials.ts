@@ -42,7 +42,7 @@ export class PrivateWorkflowApiPublicKey implements ICredentialType {
 			description: 'API key for authenticating with the n8nCloud Private Workflow API.',
 		},
 		{
-			displayName: 'Public Key (Encrypt Payloads)',
+			displayName: 'Public Key for Payload encryption/decription',
 			name: 'publicKey',
 			type: 'string',
 			typeOptions: { rows: 5, password: false },

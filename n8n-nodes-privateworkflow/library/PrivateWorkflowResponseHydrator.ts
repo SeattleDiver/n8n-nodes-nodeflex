@@ -17,9 +17,7 @@ export class PrivateWorkflowResponseHydrator {
   ): HydrationResult {
 
     const binaryKey = options.binaryPropertyName ?? 'file';
-
     const status: string | undefined = body?.status;
-    const correlationId: string | undefined = body?.correlationId;
 
     if (!status) {
       throw new Error('Response missing status');
@@ -33,10 +31,7 @@ export class PrivateWorkflowResponseHydrator {
         state: 'pending',
         items: [
           {
-            json: {
-              status,
-              correlationId,
-            },
+            json: { status },
           },
         ],
       };
@@ -60,68 +55,41 @@ export class PrivateWorkflowResponseHydrator {
         state: 'completed',
         items: [
           {
-            json: {
-              status,
-              correlationId,
-            },
+            json: { status },
           },
         ],
       };
     }
 
     // ------------------------------------------------------------
-    // Inline payload handling
+    // Inline payload
     // ------------------------------------------------------------
     if (payload.type === 'inline' && typeof payload.value === 'string') {
 
-      let parsed: any;
-      let isJson = false;
-
-      try {
-        parsed = JSON.parse(payload.value);
-        isJson = true;
-      } catch {
-        parsed = payload.value; // plain text
-      }
+      const encoding = payload.encoding as
+        | 'json'
+        | 'text'
+        | 'base64'
+				| 'none'
+        | undefined;
 
       // --------------------------------------------------------
-      // Binary descriptor
+      // JSON encoding
       // --------------------------------------------------------
-      if (
-        isJson &&
-        parsed &&
-        typeof parsed === 'object' &&
-        !Array.isArray(parsed) &&
-        typeof parsed.data === 'string' &&
-        typeof parsed.mimeType === 'string'
-      ) {
-        return {
-          state: 'completed',
-          items: [
-            {
-              json: {
-                status,
-                correlationId,
-              },
-              binary: {
-                [binaryKey]: parsed,
-              },
-            },
-          ],
-        };
-      }
+      if (encoding === 'json') {
+        let parsed: any;
 
-      // --------------------------------------------------------
-      // JSON payload
-      // --------------------------------------------------------
-      if (isJson) {
+        try {
+          parsed = JSON.parse(payload.value);
+        } catch {
+          throw new Error('Invalid JSON payload');
+        }
 
         if (Array.isArray(parsed)) {
           for (const element of parsed) {
             items.push({
               json: {
                 status,
-                correlationId,
                 ...(element ?? {}),
               },
             });
@@ -130,28 +98,101 @@ export class PrivateWorkflowResponseHydrator {
           items.push({
             json: {
               status,
-              correlationId,
               ...(parsed ?? {}),
             },
           });
         }
 
+        return { state: 'completed', items };
+      }
+
+      // --------------------------------------------------------
+      // TEXT encoding
+      // --------------------------------------------------------
+      if (encoding === 'text') {
         return {
           state: 'completed',
-          items,
+          items: [
+            {
+              json: {
+                status,
+                text: payload.value,
+              },
+            },
+          ],
         };
       }
 
       // --------------------------------------------------------
-      // Text payload
+      // BASE64 (binary) encoding
       // --------------------------------------------------------
+      if (encoding === 'base64') {
+        return {
+          state: 'completed',
+          items: [
+            {
+              json: { status },
+              binary: {
+                [binaryKey]: {
+                  data: payload.value,
+                  mimeType: 'application/octet-stream',
+                  fileName: 'workflow-response.bin',
+                },
+              },
+            },
+          ],
+        };
+      }
+
+			// --------------------------------------------------------
+      // none encoding
+      // --------------------------------------------------------
+      if (encoding === 'none') {
+        return {
+          state: 'completed',
+          items: [
+            {
+              json: {
+                status
+              },
+            },
+          ],
+        };
+      }
+
+      // --------------------------------------------------------
+      // Legacy fallback (no encoding specified)
+      // --------------------------------------------------------
+      let parsed: any;
+      let isJson = false;
+
+      try {
+        parsed = JSON.parse(payload.value);
+        isJson = true;
+      } catch {
+        parsed = payload.value;
+      }
+
+      if (isJson && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return {
+          state: 'completed',
+          items: [
+            {
+              json: {
+                status,
+                ...(parsed ?? {}),
+              },
+            },
+          ],
+        };
+      }
+
       return {
         state: 'completed',
         items: [
           {
             json: {
               status,
-              correlationId,
               text: parsed,
             },
           },
@@ -160,16 +201,32 @@ export class PrivateWorkflowResponseHydrator {
     }
 
     // ------------------------------------------------------------
-    // Fallback: unknown payload shape
+    // Reference payload (future-safe)
+    // ------------------------------------------------------------
+    if (payload.type === 'reference') {
+      return {
+        state: 'completed',
+        items: [
+          {
+            json: {
+              status,
+              url: payload.url,
+              length: payload.length,
+              encoding: payload.encoding,
+            },
+          },
+        ],
+      };
+    }
+
+    // ------------------------------------------------------------
+    // Fallback
     // ------------------------------------------------------------
     return {
       state: 'completed',
       items: [
         {
-          json: {
-            status,
-            correlationId,
-          },
+          json: { status },
         },
       ],
     };

@@ -7,10 +7,12 @@ import {
 	NodeOperationError
 } from 'n8n-workflow';
 import { PrivateWorkflowResponseRegistry } from '../../library/PrivateWorkflowResponseRegistry';
+import type { WorkflowPayloadEncoding } from '../../library/WorkflowPayloadEncoding';
+
 
 export class RespondToPrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Respond to Private Workflow 0004',
+		displayName: 'Respond to Private Workflow 0031',
 		name: 'respondToPrivateWorkflow',
 		group: ['output'],
 		version: 1,
@@ -33,34 +35,35 @@ export class RespondToPrivateWorkflow implements INodeType {
 					{
 						name: 'All Incoming Items',
 						value: 'allItems',
-						description: 'Respond with all input JSON items',
+						description: 'Return all incoming items as JSON objects (binary data is not supported).'
 					},
 					{
 						name: 'Binary File',
 						value: 'binary',
-						description: 'Respond with incoming file binary data',
+						description: 'Return a binary file from the incoming items.'
 					},
 					{
 						name: 'First Incoming Item',
 						value: 'firstItem',
-						description: 'Respond with the first input JSON item',
+						description: 'Return the first incoming item as a JSON object (binary data is not supported).'
 					},
 					{
 						name: 'JSON',
 						value: 'json',
-						description: 'Respond with a custom JSON body',
+						description: 'Return a custom JSON object defined in this node.'
 					},
 					{
 						name: 'No Data',
 						value: 'none',
-						description: 'Respond with an empty body',
+						description: 'Return no response payload.'
 					},
 					{
 						name: 'Text',
 						value: 'text',
-						description: 'Respond with a simple text message body',
+						description: 'Return a plain text response.'
 					},
 				],
+
 			},
 
 			// ---------- JSON Response ----------
@@ -71,7 +74,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 				typeOptions: {
 					rows: 4
 				},
-				default: `{{ $json }}`,
+				default: ``,
 				description: 'The JSON to send in the response',
 				displayOptions: {
 					show: {
@@ -165,229 +168,424 @@ export class RespondToPrivateWorkflow implements INodeType {
 			return [items];
 		}
 
-		let payload: any;
+		//let payload: any;
+		let encoding: WorkflowPayloadEncoding = "json";
 
 		const respondWith = this.getNodeParameter('respondWith', 0) as string;
 
-		// Helper: extract the payload interior only
-		const extractPayload = (item: INodeExecutionData) => {
-			const { payload } = item.json as any;
-			return payload ?? null;
+		// // Helper: extract the payload interior only
+		// const extractPayload = (item: INodeExecutionData) => {
+		// 	const { payload } = item.json as any;
+		// 	return payload ?? null;
+		// };
+
+		// ---------------------------------------------------------------------
+		// Send the response
+		// ---------------------------------------------------------------------
+		const sendResponseToHubSafe = async (
+			correlationId: string,
+			status: 'Completed' | 'Failed',
+			requestId: string,
+			basePayload: any,
+			path: string,
+			encoding: WorkflowPayloadEncoding,
+			client: {
+				sendResponseToHub: (
+					correlationId: string,
+					status: string,
+					requestId: string,
+					payload: IDataObject,
+					path: string,
+					encoding: WorkflowPayloadEncoding
+				) => Promise<void>;
+			},
+		): Promise<void> => {
+
+			let payload = basePayload;
+
+			if (status === 'Failed') {
+				if (basePayload instanceof Error) {
+					payload = {
+						error: true,
+						message: basePayload.message,
+						code: 'RESPOND_NODE_ERROR',
+						retryable: false,
+						encoding: encoding
+					};
+				} else if (basePayload == null) {
+					payload = {
+						error: true,
+						message: 'Unknown error',
+						code: 'RESPOND_NODE_ERROR',
+						retryable: false,
+						encoding: encoding
+					};
+				}
+			}
+
+			await client.sendResponseToHub(
+				correlationId,
+				status,
+				requestId,
+				payload,
+				path,
+				encoding
+			);
 		};
 
-		switch (respondWith) {
+		try
+		{
+			let payload: any;
+			switch (respondWith) {
 
-			case 'allItems': {
-				// Return ONLY the payload interior for every input
-				payload = items.map(extractPayload);
-				outputItems.push(
-					...items.map(it => ({ json: extractPayload(it) as IDataObject }))
-				);
-				break;
-			}
+				case 'allItems': {
+					// 1️⃣ Reject binary explicitly
+					for (const item of items) {
+						if (item.binary && Object.keys(item.binary).length > 0) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'"All Items" response does not support binary data. Use "Binary File" instead.'
+							);
+						}
+					}
 
-			case 'firstItem': {
-				const firstPayload = extractPayload(items[0]);
-				payload = firstPayload;
-				outputItems.push({ json: firstPayload as IDataObject });
-				break;
-			}
+					// 2️⃣ Collect JSON items
+					const jsonItems: IDataObject[] = [];
 
-			case 'json': {
-				const raw = this.getNodeParameter('responseData', 0);
+					for (const item of items) {
+						if (item.json && typeof item.json === 'object') {
+							jsonItems.push(item.json as IDataObject);
+							outputItems.push({ json: item.json as IDataObject });
+						}
+					}
 
-				let parsed: IDataObject;
-
-				// 1️⃣ If n8n already gave us an object, use it
-				if (raw !== null && typeof raw === 'object' && !Array.isArray(raw)) {
-					// Deep clone to break n8n references
-					parsed = JSON.parse(JSON.stringify(raw));
+					// 3️⃣ Hub payload = array of JSON objects
+					payload = jsonItems;
+					break;
 				}
 
-				// 2️⃣ If it's a string, try to parse it as JSON
-				else if (typeof raw === 'string') {
-					const trimmed = raw.trim();
+				case 'firstItem': {
+					// Reuse allItems logic
+					if (items.length === 0) {
+						//payload = null;
+						outputItems.push({ json: {} });
+						break;
+					}
 
-					if (!trimmed) {
+					const item = items[0];
+
+					if (item.binary && Object.keys(item.binary).length > 0) {
 						throw new NodeOperationError(
 							this.getNode(),
-							'Response Body is empty; expected valid JSON'
+							'"First Item" response does not support binary data. Use "Binary File" instead.'
 						);
 					}
 
-					try {
-						const value = JSON.parse(trimmed);
+					if (!item.json || typeof item.json !== 'object' || Array.isArray(item.json)) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'"First Item" requires the item to be a JSON object.'
+						);
+					}
 
-						if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-							throw new NodeOperationError(this.getNode(), 'Parsed JSON is not an object');
+					const clean = { ...(item.json as IDataObject) };
+					delete (clean as any).__correlationId;
+
+					payload = clean;
+					outputItems.push({ json: clean });
+					break;
+				}
+
+				case 'json': {
+					const raw = this.getNodeParameter('responseData', 0);
+					let parsed: IDataObject | IDataObject[] | null;
+
+					// Already a resolved object or array (expression like {{ $json.client }})
+					if (raw !== null && typeof raw === 'object') {
+						// Deep clone to detach n8n internals
+						parsed = JSON.parse(JSON.stringify(raw));
+					}
+
+					// String → attempt JSON.parse (JSON literal with expressions)
+					else if (typeof raw === 'string') {
+						const trimmed = raw.trim();
+
+						if (!trimmed) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Response Body is empty; expected valid JSON'
+							);
 						}
 
-						parsed = value as IDataObject;
-					} catch {
+						try {
+							parsed = JSON.parse(trimmed);
+						} catch {
+							throw new NodeOperationError(
+								this.getNode(),
+								'Response Body must contain valid JSON'
+							);
+						}
+					}
+
+					// Everything else is invalid
+					else {
 						throw new NodeOperationError(
 							this.getNode(),
-							'Response Body must contain valid JSON (object)'
+							`Response Body resolved to unsupported type (${typeof raw})`
 						);
 					}
+
+					// Canonical hub payload
+					payload = parsed;
+
+					// Canonical n8n output
+					if (Array.isArray(parsed)) {
+						outputItems.push(
+							...parsed.map(p => ({ json: p as IDataObject }))
+						);
+					} else {
+						outputItems.push({ json: parsed as IDataObject });
+					}
+
+					break;
 				}
 
-				// 3️⃣ Anything else is unsupported
-				else {
-					throw new NodeOperationError(
-						this.getNode(),
-						`Response Body resolved to unsupported type (${typeof raw}); expected JSON object`
-					);
+				case 'text': {
+					const text = String(this.getNodeParameter('responseText', 0));
+					payload = text;
+					encoding = "text";
+
+					// workflow output: keep it JSON-safe
+					outputItems.push({
+						json: { "text": text },
+					});
+
+					break;
 				}
 
-				// 🔑 Canonical payload (SignalR)
-				payload = parsed;
+				case 'binary': {
+					encoding = "base64";
+					const binaryMode = this.getNodeParameter('binaryMode', 0) as string;
 
-				// 🔑 Canonical output (n8n)
-				outputItems.push({ json: parsed });
+					let binaryData;
+					let binaryPropertyName: string | undefined;
 
-				break;
+					if (binaryMode === 'manual') {
+						binaryPropertyName = this.getNodeParameter('binaryPropertyName', 0) as string;
+						binaryData = items[0].binary?.[binaryPropertyName];
+					} else {
+						const binaryObj = items[0].binary;
+						if (binaryObj && Object.keys(binaryObj).length > 0) {
+							binaryPropertyName = Object.keys(binaryObj)[0];
+							binaryData = binaryObj[binaryPropertyName];
+						}
+					}
+
+					if (!binaryData || !binaryPropertyName) {
+						this.logger?.warn?.(
+							`[RespondToPrivateWorkflow] No binary data for correlation=${correlationId}`
+						);
+
+						payload = null;
+
+						outputItems.push({
+							json: { correlationId, status: 'Success' },
+						});
+
+					} else {
+						// Extract the binary base64 code as n8n expects
+						payload = binaryData.data;
+
+						outputItems.push({
+							json: { correlationId, status: 'Success' },
+							binary: {
+								[binaryPropertyName]: binaryData,
+							},
+						});
+					}
+
+					break;
+				}
+
+				case 'none':
+				default:
+					payload = null;
+					encoding = "none";
+						outputItems.push({
+							json: { correlationId, status: 'Success' },
+						});
+					break;
 			}
 
+			//const responseItem: any = outputItems[0];
+			// const responseItem: any = payload;
 
-			// case 'json': {
-			// 	const raw = this.getNodeParameter('responseData', 0);
+			// Clean JSON for hub
+			// let hubPayload: IDataObject | string | null = null;
 
-			// 	if (typeof raw !== 'string') {
-			// 		throw new NodeOperationError(
-			// 			this.getNode(),
-			// 			'Response Body must be a JSON string'
-			// 		);
+			// if (respondWith === 'text') {
+			// 	hubPayload = responseItem.json as string;
+			// }
+			// else if (respondWith === 'json') {
+			// 	const clean = { ...(responseItem.json as IDataObject) };
+			// 	delete (clean as any).__correlationId;
+			// 	hubPayload = clean;
+			// }
+			// else if (respondWith === 'binary') {
+			// 	const clean = { ...(responseItem.json as IDataObject) };
+			// 	delete (clean as any).__correlationId;
+
+			// 	if (responseItem.binary?.file) {
+			// 		(clean as IDataObject).__binary = {
+			// 			data: responseItem.binary.file.data,
+			// 			mimeType: responseItem.binary.file.mimeType,
+			// 			fileName: responseItem.binary.file.fileName,
+			// 		};
 			// 	}
 
-			// 	let parsed: IDataObject;
-
-			// 	try {
-			// 		parsed = JSON.parse(raw);
-			// 	} catch {
-			// 		throw new NodeOperationError(
-			// 			this.getNode(),
-			// 			'Response Body must contain valid JSON'
-			// 		);
-			// 	}
-
-			// 	// 🔑 parsed object becomes the payload
-			// 	payload = parsed;
-
-			// 	// 🔑 n8n output uses the SAME parsed object
-			// 	outputItems.push({ json: parsed });
-
-			// 	break;
+			// 	hubPayload = clean;
+			// }
+			// else {
+			// 	hubPayload = null;
 			// }
 
-			// case 'json': {
-			// 	// The user explicitly provides JSON → send it exactly
-			// 	const jsonBody = this.getNodeParameter('responseData', 0) || {};
-			// 	payload = jsonBody;
-			// 	outputItems.push({ json: jsonBody as IDataObject });
-			// 	break;
-			// }
 
-			case 'text': {
-				// Simple text body
-				const text = String(this.getNodeParameter('responseText', 0));
-				payload = text;
-				outputItems.push({ json: { text } });
-				break;
+			// ------------------------------------------------------------------------------------
+			// Cleanup internal fields (__correlationId)
+			// ------------------------------------------------------------------------------------
+
+			// Clean workflow output items
+			for (let i = 0; i < outputItems.length; i++) {
+				const item = outputItems[i];
+				const json = item.json;
+
+				if (json && typeof json === 'object' && !Array.isArray(json)) {
+					const clean = { ...(json as IDataObject) };
+					delete (clean as any).__correlationId;
+					outputItems[i] = {
+						...item,
+						json: clean,
+					};
+				}
 			}
 
-			case 'binary': {
-				const binaryMode = this.getNodeParameter('binaryMode', 0) as string;
-
-				let binaryData;
-				let binaryPropertyName: string | undefined;
-
-				if (binaryMode === 'manual') {
-					binaryPropertyName = this.getNodeParameter('binaryPropertyName', 0) as string;
-					binaryData = items[0].binary?.[binaryPropertyName];
-				} else {
-					const binaryObj = items[0].binary;
-					if (binaryObj && Object.keys(binaryObj).length > 0) {
-						binaryPropertyName = Object.keys(binaryObj)[0];
-						binaryData = binaryObj[binaryPropertyName];
+			// Clean hub payload
+			if (Array.isArray(payload)) {
+				for (let i = 0; i < payload.length; i++) {
+					const obj = payload[i];
+					if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+						const clean = { ...(obj as IDataObject) };
+						delete (clean as any).__correlationId;
+						payload[i] = clean;
 					}
 				}
-
-				if (!binaryData || !binaryPropertyName) {
-					this.logger?.warn?.(
-						`[RespondToPrivateWorkflow] No binary data for correlation=${correlationId}`
-					);
-
-					payload = null;
-
-					outputItems.push({
-						json: { correlationId, status: 'Success' },
-					});
-
-				} else {
-					// 🔑 Preserve the binary exactly as n8n expects
-					payload = binaryData;
-
-					outputItems.push({
-						json: { correlationId, status: 'Success' },
-						binary: {
-							[binaryPropertyName]: binaryData,
-						},
-					});
-				}
-
-				break;
+			} else if (payload && typeof payload === 'object') {
+				const clean = { ...(payload as IDataObject) };
+				delete (clean as any).__correlationId;
+				payload = clean;
 			}
 
-			case 'none':
-			default:
-				payload = null;
-				outputItems.push({ json: {} });
-				break;
+			// Capture binary from outputItems (hub path)
+			let binaryPayload: IDataObject | null = null;
+			if (outputItems.length > 0 && outputItems[0].binary?.file) {
+				const bin = outputItems[0].binary.file;
+
+				binaryPayload = {
+					data: bin.data,
+					mimeType: bin.mimeType,
+					fileName: bin.fileName,
+				};
+			}
+
+			// Canonical payload
+			let basePayload: IDataObject | IDataObject[] | string | null;
+
+			if (payload === null) {
+				basePayload = null;
+			} else if (typeof payload === 'string') {
+					// Strings are only valid in TEXT mode
+					if (respondWith === 'text' || respondWith === 'binary') {
+						basePayload = payload; // send raw string to hub
+					} else {
+						// Defensive: user misconfigured something
+						throw new NodeOperationError(
+							this.getNode(),
+							'[RespondToPrivateWorkflow] Payload resolved to string; expected JSON object. ' +
+							'Use "Text" response type for plain text.'
+						);
+					}
+			} else if (typeof payload === 'object') {
+				// Deep clone to break n8n refs
+				basePayload = JSON.parse(JSON.stringify(payload));
+				this.logger.info(`object type base payload: ${JSON.stringify(basePayload)}`);
+			} else {
+				throw new NodeOperationError(this.getNode(), `[RespondToPrivateWorkflow] Invalid payload type: ${typeof payload}`);
+			}
+
+			// Attach binary to the hub payload (if present)
+			if (binaryPayload && basePayload && typeof basePayload === 'object') {
+				(basePayload as IDataObject).__binary = binaryPayload;
+			}
+
+			// ------------------------------------------------------------------------------------
+			// Send a single response to the hub AFTER collecting payload
+			// ------------------------------------------------------------------------------------
+			this.logger?.info?.(
+				`[RespondToPrivateWorkflow] Sending response → req=${entry.requestId}, corr=${correlationId}, mode=${respondWith}`
+			);
+
+			await sendResponseToHubSafe(
+				correlationId,
+				'Completed',
+				entry.requestId,
+				basePayload,
+				entry.path,
+				encoding,
+				entry.client
+			);
+
+			// Cleanup once
+			clearTimeout(entry.timeout);
+			PrivateWorkflowResponseRegistry.delete(correlationId);
+
+			this.logger?.info?.(
+				`[RespondToPrivateWorkflow] ✅ Response sent & cleared (corr=${correlationId})`
+			);
+
+			// Return items to workflow
+			return [outputItems];
 		}
-
-		// Canonical payload (this is the truth)
-		let basePayload: IDataObject | null = null;
-
-		if (payload === null) {
-			basePayload = null;
-		} else if (typeof payload === 'string') {
-			// Last-chance parse (defensive)
+		catch(err)
+		{
+			// 1️⃣ Send failure to hub (best effort)
 			try {
-				basePayload = JSON.parse(payload);
-			} catch {
-				throw new NodeOperationError(this.getNode(), '[RespondToPrivateWorkflow] Payload resolved to string; expected object');
+				await sendResponseToHubSafe(
+					entry.correlationId,
+					'Failed',
+					entry.requestId,
+					err,          // can be Error or payload
+					entry.path,
+					"json",
+					entry.client
+				);
 			}
-		} else if (typeof payload === 'object') {
-			// Deep clone to break n8n refs
-			basePayload = JSON.parse(JSON.stringify(payload));
-		} else {
-			throw new NodeOperationError(this.getNode(), `[RespondToPrivateWorkflow] Invalid payload type: ${typeof payload}`);
+			catch (hubErr) {
+				// Never let hub failures mask the real error
+				this.logger.error(
+					'[RespondToPrivateWorkflow] Failed to report error to hub',
+					hubErr
+				);
+			}
+
+			// 2️⃣ Now fail the node properly
+			if (err instanceof NodeOperationError) {
+				throw err;
+			}
+
+			throw new NodeOperationError(
+				this.getNode(),
+				err instanceof Error ? err.message : String(err)
+			);
 		}
-
-		// ------------------------------------------------------------------------------------
-		// Send a single response to the hub AFTER collecting payload
-		// ------------------------------------------------------------------------------------
-		this.logger?.info?.(
-			`[RespondToPrivateWorkflow] Sending response → req=${entry.requestId}, corr=${correlationId}, mode=${respondWith}`
-		);
-
-		await entry.client.sendResponseToHub(
-			entry.correlationId,
-			'Completed',
-			entry.requestId,
-			basePayload,
-			entry.path
-		);
-
-		// ✅ Cleanup once
-		clearTimeout(entry.timeout);
-		PrivateWorkflowResponseRegistry.delete(correlationId);
-
-		this.logger?.info?.(
-			`[RespondToPrivateWorkflow] ✅ Response sent & cleared (corr=${correlationId})`
-		);
-
-		// ✅ Return items to workflow
-		return [outputItems];
 	}
 }

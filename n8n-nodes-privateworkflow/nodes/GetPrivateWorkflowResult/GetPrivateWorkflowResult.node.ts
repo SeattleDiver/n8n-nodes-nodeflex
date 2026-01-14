@@ -125,18 +125,6 @@ export class GetPrivateWorkflowResult implements INodeType {
 				`Getting workflow results for {${correlationId}} at ${targetUrl}`
 			);
 
-			// const response = await this.helpers.httpRequest({
-			// 	method: 'GET',
-			// 	url: targetUrl,
-			// 	headers: {
-			// 		'x-api-key': apiKey,
-			// 		'accept': 'application/json',
-			// 	},
-			// 	json: true,
-			// 	throwOnHttpError: false,
-			// 	resolveWithFullResponse: true
-			// });
-
 			const response = await this.helpers.request({
 				method: 'GET',
 				url: targetUrl,
