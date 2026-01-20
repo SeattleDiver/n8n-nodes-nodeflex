@@ -11,6 +11,8 @@ import { HubUrlService } from "../../library/HubUrlService";
 import { WorkflowHubService } from "../../library/WorkflowHubService";
 import { PrivateWorkflowRequest } from "../../library/PrivateWorkflowRequest";
 import { PrivateWorkflowResponseHydrator } from '../../library/PrivateWorkflowResponseHydrator';
+import { PrivateWorkflowPayload } from '../../library/PrivateWorkflowPayload';
+//import { timeStamp } from 'console';
 
 // import { PayloadEncryptor } from '../../library/PayloadEncryptor';
 
@@ -190,24 +192,41 @@ export class PrivateWorkflow implements INodeType {
 				self.logger.info(`Resolved  API url: ${apiUrl}`);
 				self.logger.info(`Resolved  Hub url: ${hubUrl}`);
 				self.logger.info(`Resolved Blob url: ${blobUrl}`);
-//				self.logger.info(`Resolved  Payload: ${encodedPayload}`);
 
 				// Construct target URL
 				const normalizedUrl = apiUrl.replace(/\/+$/, '');
 				const normalizedPath = hubPath.replace(/^\/+/, '');
 				const targetUrl = `${normalizedUrl}/${normalizedPath}`;
 
+				// ------------------------------------------------------------
+				// Decide payload transport (inline vs reference)
+				// ------------------------------------------------------------
+				const useReference = payloadLength > 64 * 1024 && !!blobUrl; // threshold example
+				let payload: PrivateWorkflowPayload;
+
+				if (useReference) {
+					payload = {
+						type: 'reference',
+						value: '<reference-url>', // populated later
+						length: payloadLength,
+						isEncrypted: false,
+						encoding: item.binary ? 'base64' : 'json',
+					};
+				} else {
+					payload = {
+						type: 'inline',
+						value: encodedPayload,
+						length: payloadLength,
+						isEncrypted: false,
+						encoding: item.binary ? 'base64' : 'json',
+					};
+				}
+
 				const request: PrivateWorkflowRequest = {
 					correlationId: crypto.randomUUID(),			// Note: the correlationId is generated in the hub
 					requestId: crypto.randomUUID(),
 					path: hubPath,
-					payload: {
-							type: "inline",
-							value: encodedPayload,
-							length: payloadLength,
-							isEncrypted: false,
-							encoding: item.binary ? "base64" : "json"
-					},
+					payload,
 					waitForResponse: waitForResponse,
 					waitTimeout: waitTimeout
 				};
@@ -219,6 +238,10 @@ export class PrivateWorkflow implements INodeType {
 				});
 
 			  this.logger.info("Calling private workflow at " + targetUrl + " at API Url:" + apiUrl + " apiKey:" + apiKey);
+				this.logger.info(`Outbound payload value      : ${JSON.stringify(payload)}`);
+				this.logger.info(`Outbound payload.value (raw): ${payload.value}`);
+				this.logger.info(`Outbound payload.length     : ${payload.length}`);
+
 				const response = await client.post(targetUrl, request);
 				this.logger.info(JSON.stringify(response));
 
@@ -237,19 +260,40 @@ export class PrivateWorkflow implements INodeType {
 				}
 
 				// Always emit ACK (request accepted, correlationId exists)
-				ackData.push({ json: response });
+				const body = (response as any).body ?? response;
+				if (!body || typeof body !== 'object')
+				{
+					throw new NodeOperationError(this.getNode(), "Invalid response body from hub");
+				}
+
+				ackData.push({
+					json: {
+						correlationId: body.correlationId,
+						//requestId: body.requestId,
+						path: body.path,
+						status: body.status,
+						timeStampUtc: body.timeStampUtc
+					}
+				});
 
 				// Route to Completed output when workflow is finished
-				const status = (response as any)?.status;
+				if (body?.status)
+				{
+					if (waitForResponse && body.status === 'Completed') {
+						this.logger.info(`[PrivateWorkflow (execute)] body:${body}`);
+						this.logger.info(`[PrivateWorkflow (execute)] json:${JSON.stringify(body)}`);
+						const result = PrivateWorkflowResponseHydrator.hydrate(body, {
+							binaryPropertyName: 'file',
+						});
 
-				if (waitForResponse && status === 'Completed') {
-					const result = PrivateWorkflowResponseHydrator.hydrate(response, {
-						binaryPropertyName: 'file',
-					});
-
-					if (result.state === 'completed') {
-						completedData.push(...result.items);
+						if (result.state === 'completed') {
+							completedData.push(...result.items);
+						}
 					}
+				}
+				else
+				{
+					throw new NodeOperationError(this.getNode(), "Missing body in response");
 				}
 
 			} catch (error: any) {

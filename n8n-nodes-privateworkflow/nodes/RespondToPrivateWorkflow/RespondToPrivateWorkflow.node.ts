@@ -7,8 +7,7 @@ import {
 	NodeOperationError
 } from 'n8n-workflow';
 import { PrivateWorkflowResponseRegistry } from '../../library/PrivateWorkflowResponseRegistry';
-import type { WorkflowPayloadEncoding } from '../../library/WorkflowPayloadEncoding';
-
+import { PrivateWorkflowPayload, PrivateWorkflowPayloadEncoding } from '../../library/PrivateWorkflowPayload';
 
 export class RespondToPrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
@@ -168,70 +167,8 @@ export class RespondToPrivateWorkflow implements INodeType {
 			return [items];
 		}
 
-		//let payload: any;
-		let encoding: WorkflowPayloadEncoding = "json";
-
+		let encoding: PrivateWorkflowPayloadEncoding = "json";
 		const respondWith = this.getNodeParameter('respondWith', 0) as string;
-
-		// // Helper: extract the payload interior only
-		// const extractPayload = (item: INodeExecutionData) => {
-		// 	const { payload } = item.json as any;
-		// 	return payload ?? null;
-		// };
-
-		// ---------------------------------------------------------------------
-		// Send the response
-		// ---------------------------------------------------------------------
-		const sendResponseToHubSafe = async (
-			correlationId: string,
-			status: 'Completed' | 'Failed',
-			requestId: string,
-			basePayload: any,
-			path: string,
-			encoding: WorkflowPayloadEncoding,
-			client: {
-				sendResponseToHub: (
-					correlationId: string,
-					status: string,
-					requestId: string,
-					payload: IDataObject,
-					path: string,
-					encoding: WorkflowPayloadEncoding
-				) => Promise<void>;
-			},
-		): Promise<void> => {
-
-			let payload = basePayload;
-
-			if (status === 'Failed') {
-				if (basePayload instanceof Error) {
-					payload = {
-						error: true,
-						message: basePayload.message,
-						code: 'RESPOND_NODE_ERROR',
-						retryable: false,
-						encoding: encoding
-					};
-				} else if (basePayload == null) {
-					payload = {
-						error: true,
-						message: 'Unknown error',
-						code: 'RESPOND_NODE_ERROR',
-						retryable: false,
-						encoding: encoding
-					};
-				}
-			}
-
-			await client.sendResponseToHub(
-				correlationId,
-				status,
-				requestId,
-				payload,
-				path,
-				encoding
-			);
-		};
 
 		try
 		{
@@ -410,45 +347,12 @@ export class RespondToPrivateWorkflow implements INodeType {
 				case 'none':
 				default:
 					payload = null;
-					encoding = "none";
+					encoding = "json";
 						outputItems.push({
 							json: { correlationId, status: 'Success' },
 						});
 					break;
 			}
-
-			//const responseItem: any = outputItems[0];
-			// const responseItem: any = payload;
-
-			// Clean JSON for hub
-			// let hubPayload: IDataObject | string | null = null;
-
-			// if (respondWith === 'text') {
-			// 	hubPayload = responseItem.json as string;
-			// }
-			// else if (respondWith === 'json') {
-			// 	const clean = { ...(responseItem.json as IDataObject) };
-			// 	delete (clean as any).__correlationId;
-			// 	hubPayload = clean;
-			// }
-			// else if (respondWith === 'binary') {
-			// 	const clean = { ...(responseItem.json as IDataObject) };
-			// 	delete (clean as any).__correlationId;
-
-			// 	if (responseItem.binary?.file) {
-			// 		(clean as IDataObject).__binary = {
-			// 			data: responseItem.binary.file.data,
-			// 			mimeType: responseItem.binary.file.mimeType,
-			// 			fileName: responseItem.binary.file.fileName,
-			// 		};
-			// 	}
-
-			// 	hubPayload = clean;
-			// }
-			// else {
-			// 	hubPayload = null;
-			// }
-
 
 			// ------------------------------------------------------------------------------------
 			// Cleanup internal fields (__correlationId)
@@ -485,47 +389,23 @@ export class RespondToPrivateWorkflow implements INodeType {
 				payload = clean;
 			}
 
-			// Capture binary from outputItems (hub path)
-			let binaryPayload: IDataObject | null = null;
-			if (outputItems.length > 0 && outputItems[0].binary?.file) {
-				const bin = outputItems[0].binary.file;
+			// ------------------------------------------------------------------------------------
+			// Build canonical PrivateWorkflowPayload for hub
+			// ------------------------------------------------------------------------------------
+			const serializedValue =
+				payload == null
+					? ''
+					: typeof payload === 'string'
+						? payload
+						: JSON.stringify(payload);
 
-				binaryPayload = {
-					data: bin.data,
-					mimeType: bin.mimeType,
-					fileName: bin.fileName,
-				};
-			}
-
-			// Canonical payload
-			let basePayload: IDataObject | IDataObject[] | string | null;
-
-			if (payload === null) {
-				basePayload = null;
-			} else if (typeof payload === 'string') {
-					// Strings are only valid in TEXT mode
-					if (respondWith === 'text' || respondWith === 'binary') {
-						basePayload = payload; // send raw string to hub
-					} else {
-						// Defensive: user misconfigured something
-						throw new NodeOperationError(
-							this.getNode(),
-							'[RespondToPrivateWorkflow] Payload resolved to string; expected JSON object. ' +
-							'Use "Text" response type for plain text.'
-						);
-					}
-			} else if (typeof payload === 'object') {
-				// Deep clone to break n8n refs
-				basePayload = JSON.parse(JSON.stringify(payload));
-				this.logger.info(`object type base payload: ${JSON.stringify(basePayload)}`);
-			} else {
-				throw new NodeOperationError(this.getNode(), `[RespondToPrivateWorkflow] Invalid payload type: ${typeof payload}`);
-			}
-
-			// Attach binary to the hub payload (if present)
-			if (binaryPayload && basePayload && typeof basePayload === 'object') {
-				(basePayload as IDataObject).__binary = binaryPayload;
-			}
+			const hubPayload: PrivateWorkflowPayload = {
+				type: 'inline',
+				value: serializedValue,
+				encoding,
+				isEncrypted: false,
+				length: serializedValue.length,
+			};
 
 			// ------------------------------------------------------------------------------------
 			// Send a single response to the hub AFTER collecting payload
@@ -534,14 +414,12 @@ export class RespondToPrivateWorkflow implements INodeType {
 				`[RespondToPrivateWorkflow] Sending response → req=${entry.requestId}, corr=${correlationId}, mode=${respondWith}`
 			);
 
-			await sendResponseToHubSafe(
+			await entry.client.sendResponseToHub(
 				correlationId,
 				'Completed',
 				entry.requestId,
-				basePayload,
-				entry.path,
-				encoding,
-				entry.client
+				hubPayload,
+				entry.path
 			);
 
 			// Cleanup once
@@ -559,14 +437,12 @@ export class RespondToPrivateWorkflow implements INodeType {
 		{
 			// 1️⃣ Send failure to hub (best effort)
 			try {
-				await sendResponseToHubSafe(
+				await entry.client.sendResponseToHub(
 					entry.correlationId,
 					'Failed',
 					entry.requestId,
 					err,          // can be Error or payload
-					entry.path,
-					"json",
-					entry.client
+					entry.path
 				);
 			}
 			catch (hubErr) {

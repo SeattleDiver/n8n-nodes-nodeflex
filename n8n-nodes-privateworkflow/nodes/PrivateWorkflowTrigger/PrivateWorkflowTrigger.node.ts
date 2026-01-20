@@ -156,6 +156,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 						// -------------------------------------------------------------------------------------------------------------------------------------------
 						onExecute: async ({ request, inlineJson, inlineText, payload }) => {
 
+							this.logger.info(`[PrivateWorkflowTrigger] JSON : ${inlineJson}`)
 							try {
 								// Prepare the item
 								const raw = inlineJson ?? inlineText ?? null;
@@ -165,8 +166,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 												? (raw as any).json
 												: raw ?? { text: inlineText ?? null };
 
-							  const requestId =
-										request?.requestId ?? 'unknown';
+							  const requestId = request?.requestId ?? 'unknown';
 
   							// Get the respond mode selected in node UI
 								var respondMode = this.getNodeParameter('respond', 0) as string;
@@ -193,22 +193,44 @@ export class PrivateWorkflowTrigger implements INodeType {
 								// Decode the workflow request payload
 								const wfPayload = request.payload as PrivateWorkflowPayload;
 
+								// ------------------------------------------------------------
+								// Normalize reference payload → inline payload
+								// ------------------------------------------------------------
+								let normalizedPayload = wfPayload;
+
+								if (wfPayload.type === 'reference') {
+									const referenceUrl = wfPayload.value;
+									if (!referenceUrl) {
+										throw new NodeOperationError(this.getNode(), 'Reference payload missing value/url');
+									}
+
+									const response = await fetch(referenceUrl);
+									const buffer = Buffer.from(await response.arrayBuffer());
+
+									normalizedPayload = {
+										...wfPayload,
+										type: 'inline',
+										value: buffer.toString('base64'),
+										encoding: 'base64',
+									};
+								}
+
 								let outItem: INodeExecutionData = {
 									json: {
 										__correlationId: correlationId
 									},
 								};
-								if (wfPayload.type === 'inline' && wfPayload.encoding === 'base64') {
+								if (normalizedPayload.type === 'inline' && normalizedPayload.encoding === 'base64') {
 									outItem.binary = {
 										file: {
-											data: wfPayload.value, // base64 (no re-encoding!)
+											data: normalizedPayload.value, // base64 (no re-encoding!)
 											fileName: 'data',
 											mimeType: 'application/octet-stream',
 										},
 									};
 								}
-								if (wfPayload.type === 'inline' && wfPayload.encoding !== 'base64') {
-									const jsonValue = JSON.parse(wfPayload.value);
+								if (normalizedPayload.type === 'inline' && normalizedPayload.encoding !== 'base64') {
+									const jsonValue = JSON.parse(normalizedPayload.value);
 
 									// Block arrays.  User must wrap them.
 									if (Array.isArray(jsonValue)) {
@@ -227,18 +249,10 @@ export class PrivateWorkflowTrigger implements INodeType {
 									// Emit exactly what was sent to the hub
 									Object.assign(outItem.json, jsonValue);
 								}
-								if (wfPayload.type === 'reference') {
-									// You decide how to fetch (HTTP, signed URL, etc.)
-									const response = await fetch(wfPayload.url);
-									const buffer = Buffer.from(await response.arrayBuffer());
-									outItem.binary = {
-										file: {
-											data: buffer.toString('base64'),
-											fileName: 'payload.bin',
-											mimeType: response.headers.get('content-type') ?? 'application/octet-stream',
-										},
-									};
-								}
+
+								// ------------------------------------------------------------
+								// Start the workflow by emitting the outItem
+								// ------------------------------------------------------------
 								this.emit([[outItem]]);
 
 								switch (respondMode) {
@@ -248,22 +262,35 @@ export class PrivateWorkflowTrigger implements INodeType {
 									// ------------------------------------------------------------------------------------------------
 									case 'immediately': {
 
-										// this.emit([[outItem]]);
 										self.logger?.info?.('[Trigger] Sending immediate response to hub...');
 
-										// Send hub response right here
+										const ackPayload: PrivateWorkflowPayload = {
+											type: 'inline',
+											value: JSON.stringify({
+												ok: true,
+												mode: respondMode,
+												receivedAt: new Date().toISOString(),
+											}),
+											encoding: 'json',
+											isEncrypted: false,
+											length: JSON.stringify({
+												ok: true,
+												mode: respondMode,
+												receivedAt: new Date().toISOString(),
+											}).length,
+										};
+
 										void client.sendResponseToHub(
 											correlationId,
 											'Running',
 											requestId,
-											{ ok: true, mode: respondMode, receivedAt: new Date().toISOString() },
+											ackPayload,
 											hubPath,
-											"json"
 										).catch(err =>
 											self.logger?.warn?.(`[Trigger] sendResponseToHub error: ${err}`)
 										);
 
-										// ✅ Do NOT return an object — this tells n8n “we're done”
+										// ✅ Do NOT return an object — this tells n8n we are done
 										return;
 									}
 

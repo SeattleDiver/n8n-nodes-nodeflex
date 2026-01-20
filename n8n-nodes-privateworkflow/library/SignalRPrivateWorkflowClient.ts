@@ -9,7 +9,6 @@ import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
 import { PrivateWorkflowRequest } from './PrivateWorkflowRequest';
 import { PrivateWorkflowResponse } from './PrivateWorkflowResponse';
 import { SignalRClientConfig } from './SignalRClientConfig';
-import type { WorkflowPayloadEncoding } from './WorkflowPayloadEncoding';
 
 // ====================================================================
 // Helpers
@@ -18,21 +17,6 @@ import type { WorkflowPayloadEncoding } from './WorkflowPayloadEncoding';
 function mask(s?: string, keep = 4): string {
 	if (!s) return '(empty)';
 	return s.length <= keep ? '*'.repeat(s.length) : s.slice(0, keep) + '…';
-}
-
-function extractInlineText(payload?: PrivateWorkflowPayload): string | undefined {
-    if (!payload) return undefined;
-    if (payload.type !== 'inline') return undefined;
-    return payload.value;
-}
-
-function extractInlineJson(text?: string): any | undefined {
-    if (!text) return undefined;
-    try {
-        return JSON.parse(text);
-    } catch {
-        return undefined;
-    }
 }
 
 // ====================================================================
@@ -215,40 +199,87 @@ export class SignalRPrivateWorkflowClient {
 	// Handle Incoming Workflow Execution
 	// ------------------------------------------------------------------
 	private async handleExecute(req: PrivateWorkflowRequest): Promise<void> {
-			if (!this.conn) return;
+		if (!this.conn) return;
 
-			const correlationId = req.correlationId ?? '';
-			const requestId = req.requestId ?? '';
-			const path = req.path ?? '';
+		this.log("info", `req: ${JSON.stringify(req)}`);
 
-			// ACK immediately
-			await this.sendAckToHub(correlationId, requestId, path);
+		const correlationId = req.correlationId ?? '';
+		const requestId = req.requestId ?? '';
+		const path = req.path ?? '';
 
-			// Get the payload object
-			const payload = req.payload;
-			const inlineText = extractInlineText(payload);
-			const inlineJson = extractInlineJson(inlineText);
+		// ---------------------------------------------------------------------
+		// ACK immediately (unchanged behavior)
+		// ---------------------------------------------------------------------
+		await this.sendAckToHub(correlationId, requestId, path);
 
-			this.log('info', 'ExecutePrivateWorkflow received', {
-					requestId,
-					path,
-					payloadType: payload?.type,
-			});
+		// ---------------------------------------------------------------------
+		// Normalize payload using new PrivateWorkflowPayload contract
+		// ---------------------------------------------------------------------
+		let inlineText: string | undefined;
+		let inlineJson: string | undefined;
 
-			// Call user handler with new fields
-			const result = await this.cfg.onExecute({
-					request: req,
-					inlineJson,
-					inlineText,
-					payload,
-			});
+		const payload = req.payload as PrivateWorkflowPayload | undefined;
+		if (payload) {
+			if (payload.type === 'inline') {
 
-			this.log('info', jsonStringify(result));
+				switch (payload.encoding) {
 
-			// Manual-run resolver
-			const resolver = this.onceResolvers.shift();
-			if (resolver) resolver();
+					case 'text':
+						inlineText = payload.value;
+						break;
+
+					case 'json':
+						inlineJson = payload.value;
+						break;
+
+						case 'base64':
+						// Binary payload — no inlineJson/inlineText
+						break;
+
+						default:
+						this.log('warn', `Unsupported payload encoding: ${payload.encoding}`);
+				}
+			}
+
+			else if (payload.type === 'reference') {
+				// Do NOT fetch here — Trigger already normalizes reference payloads
+				this.log(
+					'info',
+					'Received reference payload (deferred resolution)',
+					{ requestId, path }
+				);
+			}
+		}
+
+		this.log('info', 'ExecutePrivateWorkflow received', {
+			requestId,
+			path,
+			payloadType: payload?.type,
+			encoding: payload?.encoding,
+			length: payload?.length,
+		});
+
+		// ---------------------------------------------------------------------
+		// Call user handler (contract preserved)
+		// ---------------------------------------------------------------------
+		const result = await this.cfg.onExecute({
+			request: req,
+			inlineJson,
+			inlineText,
+			payload,
+		});
+
+		this.log('info', jsonStringify(result));
+
+		// ---------------------------------------------------------------------
+		// Manual-run resolver (unchanged)
+		// ---------------------------------------------------------------------
+		const resolver = this.onceResolvers.shift();
+		if (resolver) resolver();
 	}
+
+
+
 
 	// ------------------------------------------------------------------
 	// Send ACK (message-based, first-wins)
@@ -287,9 +318,8 @@ export class SignalRPrivateWorkflowClient {
 		correlationId: string,
 		status: string,
 		requestId: string,
-		body: any,
-		path: string,
-		encoding: WorkflowPayloadEncoding,
+		payload: PrivateWorkflowPayload,
+		path: string
 	): Promise<void> {
 
 		if (!this.conn) {
@@ -298,52 +328,19 @@ export class SignalRPrivateWorkflowClient {
 		}
 
 		try {
-			let value: string;
-
-			// ------------------------------------------------------------
-			// Encode payload correctly (NO double-encoding)
-			// ------------------------------------------------------------
-			switch (encoding) {
-
-				case 'none':
-					value = ""; // 🔑 NO stringify
-					break;
-
-				case 'text': {
-					if (typeof body !== 'string') {
-						throw new Error('Text payload must be a string');
-					}
-					value = body; // 🔑 NO stringify
-					break;
-				}
-
-				case 'json': {
-					// Objects or arrays only
-					value = JSON.stringify(body ?? {});
-					break;
-				}
-
-				case 'base64': {
-					if (typeof body !== 'string') {
-						throw new Error('Base64 payload must be a string');
-					}
-					value = body; // already base64
-					break;
-				}
-
-				default: {
-					throw new Error(`Unsupported payload encoding: ${encoding}`);
-				}
+			// Optional defensive check (can be removed later)
+			if (!payload || typeof payload.value !== 'string') {
+				throw new Error('Invalid PrivateWorkflowPayload: value must be a string');
 			}
 
-			const byteLength = Buffer.byteLength(value, 'utf8');
-
-			const payload: PrivateWorkflowPayload = {
-				type: 'inline',
-				value,
-				length: byteLength,
-				encoding,
-			};
+			// Optional sanity check on length (trust but verify)
+			if (payload.length !== payload.value.length) {
+				// Not fatal, but useful during refactor
+				this.log(
+					'warn',
+					`Payload length mismatch: declared=${payload.length}, actual=${payload.value.length}`
+				);
+			}
 
 			const response: PrivateWorkflowResponse = {
 				status,
@@ -356,9 +353,11 @@ export class SignalRPrivateWorkflowClient {
 			await this.conn.invoke('CompletePrivateWorkflow', response);
 
 			this.log('info', `CompletePrivateWorkflow sent for ${requestId}`);
-		} catch (err: any) {
+		}
+		catch (err: any) {
 			this.log('error', `Failed to send response for ${requestId}, ${err}`);
 		}
+
 	}
 
 	// ------------------------------------------------------------------
