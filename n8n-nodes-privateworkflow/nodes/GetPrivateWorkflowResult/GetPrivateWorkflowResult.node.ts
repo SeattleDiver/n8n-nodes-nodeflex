@@ -12,7 +12,6 @@ import { WorkflowHubService } from '../../library/WorkflowHubService';
 import { PrivateWorkflowPayload } from '../../library/PrivateWorkflowPayload';
 
 export class GetPrivateWorkflowResult implements INodeType {
-
 	description: INodeTypeDescription = {
 		displayName: 'Get Private Workflow Result',
 		name: 'getPrivateWorkflowResult',
@@ -42,34 +41,24 @@ export class GetPrivateWorkflowResult implements INodeType {
 				default: '',
 				description: 'Correlation ID returned from Execute Private Workflow',
 			},
-			{
-				displayName: 'Workflow Name',
-				name: 'workflowName',
-				type: 'string',
-				default: '',
-				placeholder: 'e.g. my-workflow',
-				required: true,
-				description: 'The private workflow path to invoke.',
-			},
 		],
 	};
 
-	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]>
-	{
+	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const completed: INodeExecutionData[] = [];
 		const pending: INodeExecutionData[] = [];
 
 		// ------------------------------------------------------------
 		// Credentials
 		// ------------------------------------------------------------
-		const creds = await this.getCredentials('privateWorkflowApiPublicKey') as {
+		const creds = (await this.getCredentials('privateWorkflowApiPublicKey')) as {
 			apiKey?: string;
 		};
 
 		if (!creds?.apiKey) {
 			throw new NodeOperationError(
 				this.getNode(),
-				'API key is missing. Configure the Private Workflow credentials.'
+				'API key is missing. Configure the Private Workflow credentials.',
 			);
 		}
 
@@ -79,11 +68,6 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// Parameters (SINGLE-SHOT)
 		// ------------------------------------------------------------
 		const correlationId = this.getNodeParameter('correlationId', 0) as string;
-		const workflowName  = this.getNodeParameter('workflowName', 0) as string;
-
-		if (!workflowName) {
-			throw new NodeOperationError(this.getNode(), 'Workflow name is required.');
-		}
 
 		// ------------------------------------------------------------
 		// Resolve execution hub via control plane
@@ -95,11 +79,10 @@ export class GetPrivateWorkflowResult implements INodeType {
 		if (!hubInfo?.hubUrl || !hubInfo?.apiUrl || !hubInfo?.blobStorageUrl) {
 			throw new NodeOperationError(
 				this.getNode(),
-				'Hub service information is incomplete or unavailable.'
+				'Hub service information is incomplete or unavailable.',
 			);
 		}
-		const hubPath = `${hubInfo.accountPath}/${workflowName}`;
-		const targetUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/${hubPath.replace(/^\/+/, '')}/results/${correlationId}`;
+		const targetUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/results/${correlationId}`;
 		this.logger.info(`[GetPrivateWorkflowResult] targetUrl = ${targetUrl}`);
 
 		// ------------------------------------------------------------
@@ -110,7 +93,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 			url: targetUrl,
 			headers: {
 				'x-api-key': apiKey,
-				'accept': 'application/json',
+				accept: 'application/json',
 			},
 			returnFullResponse: true,
 		});
@@ -120,10 +103,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		const payload = body?.payload as PrivateWorkflowPayload | undefined;
 
 		if (!status) {
-			throw new NodeOperationError(
-				this.getNode(),
-				'Hub response missing status field'
-			);
+			throw new NodeOperationError(this.getNode(), 'Hub response missing status field');
 		}
 
 		// ------------------------------------------------------------
@@ -156,7 +136,6 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// Completed WITH payload
 		// ------------------------------------------------------------
 		if (status === 'Completed' && payload?.type === 'inline') {
-
 			// -------------------------
 			// JSON
 			// -------------------------
@@ -183,7 +162,6 @@ export class GetPrivateWorkflowResult implements INodeType {
 			// BINARY (base64)
 			// -------------------------
 			else if (payload.encoding === 'base64') {
-
 				const binaryData = Buffer.from(payload.value, 'base64');
 
 				completed.push({
@@ -199,12 +177,10 @@ export class GetPrivateWorkflowResult implements INodeType {
 						},
 					},
 				});
-			}
-
-			else {
+			} else {
 				throw new NodeOperationError(
 					this.getNode(),
-					`Unsupported payload encoding: ${payload.encoding}`
+					`Unsupported payload encoding: ${payload.encoding}`,
 				);
 			}
 
@@ -214,223 +190,218 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// ------------------------------------------------------------
 		// Fallback
 		// ------------------------------------------------------------
-		throw new NodeOperationError(
-			this.getNode(),
-			`Unknown workflow status: ${status}`
-		);
+		throw new NodeOperationError(this.getNode(), `Unknown workflow status: ${status}`);
 	}
 
+	// 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 
-// 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
+	// 	const completed: INodeExecutionData[] = [];
+	// 	const pending: INodeExecutionData[] = [];
 
-// 	const completed: INodeExecutionData[] = [];
-// 	const pending: INodeExecutionData[] = [];
+	// 	// ------------------------------------------------------------
+	// 	// Resolve credentials (PUBLIC)
+	// 	// ------------------------------------------------------------
+	// 	const creds = (await this.getCredentials(
+	// 		'privateWorkflowApiPublicKey'
+	// 	)) as {
+	// 		apiKey?: string;
+	// 		publicKey?: string;
+	// 	} | null;
 
-// 	// ------------------------------------------------------------
-// 	// Resolve credentials (PUBLIC)
-// 	// ------------------------------------------------------------
-// 	const creds = (await this.getCredentials(
-// 		'privateWorkflowApiPublicKey'
-// 	)) as {
-// 		apiKey?: string;
-// 		publicKey?: string;
-// 	} | null;
+	// 	if (!creds?.apiKey) {
+	// 		throw new NodeOperationError(
+	// 			this.getNode(),
+	// 			'API key is missing. Configure the Private Workflow (Public Key) credentials.'
+	// 		);
+	// 	}
 
-// 	if (!creds?.apiKey) {
-// 		throw new NodeOperationError(
-// 			this.getNode(),
-// 			'API key is missing. Configure the Private Workflow (Public Key) credentials.'
-// 		);
-// 	}
+	// 	const apiKey = creds.apiKey;
 
-// 	const apiKey = creds.apiKey;
+	// 	// ------------------------------------------------------------
+	// 	// Resolve execution hub via control plane
+	// 	// ------------------------------------------------------------
+	// 	const hubBase = 'https://hub.n8ncloud.io';
+	// 	const hubService = new HubUrlService(hubBase);
+	// 	const hubInfo: WorkflowHubService | null =
+	// 		await hubService.getHubInfo(apiKey);
 
-// 	// ------------------------------------------------------------
-// 	// Resolve execution hub via control plane
-// 	// ------------------------------------------------------------
-// 	const hubBase = 'https://hub.n8ncloud.io';
-// 	const hubService = new HubUrlService(hubBase);
-// 	const hubInfo: WorkflowHubService | null =
-// 		await hubService.getHubInfo(apiKey);
+	// 	if (!hubInfo?.hubUrl || !hubInfo?.apiUrl || !hubInfo?.blobStorageUrl) {
+	// 		throw new NodeOperationError(
+	// 			this.getNode(),
+	// 			'Hub service information is incomplete or unavailable.'
+	// 		);
+	// 	}
 
-// 	if (!hubInfo?.hubUrl || !hubInfo?.apiUrl || !hubInfo?.blobStorageUrl) {
-// 		throw new NodeOperationError(
-// 			this.getNode(),
-// 			'Hub service information is incomplete or unavailable.'
-// 		);
-// 	}
+	// 	const apiUrl = hubInfo.apiUrl.replace(/\/+$/, '');
 
-// 	const apiUrl = hubInfo.apiUrl.replace(/\/+$/, '');
+	// 	// ------------------------------------------------------------
+	// 	// Execute per input item
+	// 	// ------------------------------------------------------------
+	// 	const items = this.getInputData();
 
-// 	// ------------------------------------------------------------
-// 	// Execute per input item
-// 	// ------------------------------------------------------------
-// 	const items = this.getInputData();
+	// 	for (let i = 0; i < items.length; i++) {
 
-// 	for (let i = 0; i < items.length; i++) {
+	// 		const correlationId =
+	// 			this.getNodeParameter('correlationId', i) as string;
 
-// 		const correlationId =
-// 			this.getNodeParameter('correlationId', i) as string;
+	// 		try {
 
-// 		try {
+	// 			const workflowName =
+	// 				this.getNodeParameter('workflowName', i) as string;
 
-// 			const workflowName =
-// 				this.getNodeParameter('workflowName', i) as string;
+	// 			if (!workflowName) {
+	// 				throw new NodeOperationError(
+	// 					this.getNode(),
+	// 					'Workflow name is required.'
+	// 				);
+	// 			}
 
-// 			if (!workflowName) {
-// 				throw new NodeOperationError(
-// 					this.getNode(),
-// 					'Workflow name is required.'
-// 				);
-// 			}
+	// 			const hubPath = `${hubInfo.accountPath}/${workflowName}`;
+	// 			const normalizedPath = hubPath.replace(/^\/+/, '');
+	// 			const targetUrl =
+	// 				`${apiUrl}/${normalizedPath}/results/${correlationId}`;
 
-// 			const hubPath = `${hubInfo.accountPath}/${workflowName}`;
-// 			const normalizedPath = hubPath.replace(/^\/+/, '');
-// 			const targetUrl =
-// 				`${apiUrl}/${normalizedPath}/results/${correlationId}`;
+	// 			this.logger.info(
+	// 				`Getting workflow results for {${correlationId}} at ${targetUrl}`
+	// 			);
 
-// 			this.logger.info(
-// 				`Getting workflow results for {${correlationId}} at ${targetUrl}`
-// 			);
+	// 			const response = await this.helpers.httpRequest({
+	// 				method: 'GET',
+	// 				url: targetUrl,
+	// 				headers: {
+	// 					'x-api-key': apiKey,
+	// 					'accept': 'application/json',
+	// 				},
+	// 				// IMPORTANT: keep these
+	// 				returnFullResponse: true,
+	// 			});
 
-// 			const response = await this.helpers.httpRequest({
-// 				method: 'GET',
-// 				url: targetUrl,
-// 				headers: {
-// 					'x-api-key': apiKey,
-// 					'accept': 'application/json',
-// 				},
-// 				// IMPORTANT: keep these
-// 				returnFullResponse: true,
-// 			});
+	// 			const body = response.body as any;
+	// 			const status: string | undefined = body?.status;
+	// 			const payload = body?.payload as PrivateWorkflowPayload | undefined;
 
-// 			const body = response.body as any;
-// 			const status: string | undefined = body?.status;
-// 			const payload = body?.payload as PrivateWorkflowPayload | undefined;
+	// 			this.logger.info(
+	// 				`[GetPrivateWorkflowResult] status=${status}, payload=${JSON.stringify(payload)}`
+	// 			);
 
-// 			this.logger.info(
-// 				`[GetPrivateWorkflowResult] status=${status}, payload=${JSON.stringify(payload)}`
-// 			);
+	// 			this.logger.info(`[GetPrivateWorkflowResult]: request: ${payload}`);
 
-// 			this.logger.info(`[GetPrivateWorkflowResult]: request: ${payload}`);
+	// 			if (!status) {
+	// 				throw new NodeOperationError(
+	// 					this.getNode(),
+	// 					'Hub response missing status field',
+	// 					{ itemIndex: i }
+	// 				);
+	// 			}
+	// 			// --------------------------------------------------------
+	// 			// Pending states
+	// 			// --------------------------------------------------------
+	// 			else if (status === 'Queued' || status === 'Running' || status === 'Pending') {
+	// 				pending.push({
+	// 					json: {
+	// 						status,
+	// 						correlationId,
+	// 					},
+	// 				});
+	// 				continue;
+	// 			}
+	// 			// ------------------------------------------------------------
+	// 			// HANDLE RATE LIMIT (429) FIRST
+	// 			// ------------------------------------------------------------
+	// 			else if (status == "rate_limited") {
+	// 					// Return a normal item with the rate limit message.  User can get the retryAfterMs and use that to wait before retrying
+	// 					pending.push({
+	// 							json: {
+	// 									status: 'rate_limited',
+	// 									correlationId,
+	// 									message:
+	// 											payload.value ??
+	// 											'Polling too frequently for this workflow execution',
+	// 											retryAfterMs: 1500  // body.retryAfterMs,
+	// 							},
+	// 					});
 
-// 			if (!status) {
-// 				throw new NodeOperationError(
-// 					this.getNode(),
-// 					'Hub response missing status field',
-// 					{ itemIndex: i }
-// 				);
-// 			}
-// 			// --------------------------------------------------------
-// 			// Pending states
-// 			// --------------------------------------------------------
-// 			else if (status === 'Queued' || status === 'Running' || status === 'Pending') {
-// 				pending.push({
-// 					json: {
-// 						status,
-// 						correlationId,
-// 					},
-// 				});
-// 				continue;
-// 			}
-// 			// ------------------------------------------------------------
-// 			// HANDLE RATE LIMIT (429) FIRST
-// 			// ------------------------------------------------------------
-// 			else if (status == "rate_limited") {
-// 					// Return a normal item with the rate limit message.  User can get the retryAfterMs and use that to wait before retrying
-// 					pending.push({
-// 							json: {
-// 									status: 'rate_limited',
-// 									correlationId,
-// 									message:
-// 											payload.value ??
-// 											'Polling too frequently for this workflow execution',
-// 											retryAfterMs: 1500  // body.retryAfterMs,
-// 							},
-// 					});
+	// 					this.logger.warn(`429 Too Many Requests for {${correlationId}}, rate limited.`);
+	// 					throw new NodeOperationError(
+	// 						this.getNode(),
+	// 						`429 Too Many Requests for {${correlationId}}, rate limited.  Polling limit is 1500ms`,
+	// 						{ itemIndex: i }
+	// 					);
+	// 			}
+	// 			else if (status !== 'Completed') {
+	// 				throw new NodeOperationError(
+	// 					this.getNode(),
+	// 					`Unknown workflow status: ${status}`,
+	// 					{ itemIndex: i }
+	// 				);
+	// 			}
+	// 			else if (status === 'Completed') {
+	// 				// --------------------------------------------------------
+	// 				// Completed → hydrate payload
+	// 				// --------------------------------------------------------
+	// 				const result = PrivateWorkflowResponseHydrator.hydrate(payload.value, {
+	// 					binaryPropertyName: 'file',
+	// 				});
 
-// 					this.logger.warn(`429 Too Many Requests for {${correlationId}}, rate limited.`);
-// 					throw new NodeOperationError(
-// 						this.getNode(),
-// 						`429 Too Many Requests for {${correlationId}}, rate limited.  Polling limit is 1500ms`,
-// 						{ itemIndex: i }
-// 					);
-// 			}
-// 			else if (status !== 'Completed') {
-// 				throw new NodeOperationError(
-// 					this.getNode(),
-// 					`Unknown workflow status: ${status}`,
-// 					{ itemIndex: i }
-// 				);
-// 			}
-// 			else if (status === 'Completed') {
-// 				// --------------------------------------------------------
-// 				// Completed → hydrate payload
-// 				// --------------------------------------------------------
-// 				const result = PrivateWorkflowResponseHydrator.hydrate(payload.value, {
-// 					binaryPropertyName: 'file',
-// 				});
+	// 				if (result.state === 'completed') {
+	// 					completed.push(...result.items);
+	// 				} else {
+	// 					pending.push(...result.items);
+	// 				}
+	// 				continue;
+	// 			}
+	// 			else
+	// 			{
+	// 				// --------------------------------------------------------
+	// 				// No payload → minimal output
+	// 				// --------------------------------------------------------
+	// 				completed.push({
+	// 					json: {
+	// 						status,
+	// 						correlationId,
+	// 					},
+	// 				});
+	// 			}
 
-// 				if (result.state === 'completed') {
-// 					completed.push(...result.items);
-// 				} else {
-// 					pending.push(...result.items);
-// 				}
-// 				continue;
-// 			}
-// 			else
-// 			{
-// 				// --------------------------------------------------------
-// 				// No payload → minimal output
-// 				// --------------------------------------------------------
-// 				completed.push({
-// 					json: {
-// 						status,
-// 						correlationId,
-// 					},
-// 				});
-// 			}
+	// 		} catch (err) {
 
-// 		} catch (err) {
+	// 			// ------------------------------------------------------------
+	// 			// CONTINUE ON FAIL (generic)
+	// 			// ------------------------------------------------------------
+	// 			if (this.continueOnFail()) {
+	// 					pending.push({
+	// 							json: {
+	// 									correlationId,
+	// 									error: true,
+	// 									message: err.message ?? err,
+	// 									itemIndex: i,
+	// 							},
+	// 					});
+	// 					continue;
+	// 			}
 
-// 			// ------------------------------------------------------------
-// 			// CONTINUE ON FAIL (generic)
-// 			// ------------------------------------------------------------
-// 			if (this.continueOnFail()) {
-// 					pending.push({
-// 							json: {
-// 									correlationId,
-// 									error: true,
-// 									message: err.message ?? err,
-// 									itemIndex: i,
-// 							},
-// 					});
-// 					continue;
-// 			}
+	// 			// ------------------------------------------------------------
+	// 			// RE-THROW KNOWN NODE ERRORS
+	// 			// ------------------------------------------------------------
+	// 			if (err instanceof NodeOperationError) {
+	// 					throw err;
+	// 			}
 
-// 			// ------------------------------------------------------------
-// 			// RE-THROW KNOWN NODE ERRORS
-// 			// ------------------------------------------------------------
-// 			if (err instanceof NodeOperationError) {
-// 					throw err;
-// 			}
+	// 			// ------------------------------------------------------------
+	// 			// FALLBACK: UNKNOWN ERROR
+	// 			// ------------------------------------------------------------
+	// 			throw new NodeOperationError(
+	// 					this.getNode(),
+	// 					err.message || 'Unexpected error retrieving workflow result',
+	// 					{ itemIndex: i }
+	// 			);
 
-// 			// ------------------------------------------------------------
-// 			// FALLBACK: UNKNOWN ERROR
-// 			// ------------------------------------------------------------
-// 			throw new NodeOperationError(
-// 					this.getNode(),
-// 					err.message || 'Unexpected error retrieving workflow result',
-// 					{ itemIndex: i }
-// 			);
+	// 		}
+	// 	}
 
-// 		}
-// 	}
-
-// 	return [
-// 		completed,
-// 		pending,
-// 	];
-// }
-
+	// 	return [
+	// 		completed,
+	// 		pending,
+	// 	];
+	// }
 }

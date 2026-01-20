@@ -3,20 +3,20 @@ import {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
-	NodeOperationError
- } from 'n8n-workflow';
+	NodeOperationError,
+} from 'n8n-workflow';
 
 import { PrivateWorkflowHttpClient } from '../../library/PrivateWorkflowHttpClient';
-import { HubUrlService } from "../../library/HubUrlService";
-import { WorkflowHubService } from "../../library/WorkflowHubService";
-import { PrivateWorkflowRequest } from "../../library/PrivateWorkflowRequest";
+import { HubUrlService } from '../../library/HubUrlService';
+import { WorkflowHubService } from '../../library/WorkflowHubService';
+import { PrivateWorkflowRequest } from '../../library/PrivateWorkflowRequest';
 import { PrivateWorkflowResponseHydrator } from '../../library/PrivateWorkflowResponseHydrator';
 import { PrivateWorkflowPayload } from '../../library/PrivateWorkflowPayload';
-//import { timeStamp } from 'console';
-
-// import { PayloadEncryptor } from '../../library/PayloadEncryptor';
 
 export class PrivateWorkflow implements INodeType {
+
+	private static readonly HUB_BASE = 'https://hub.n8ncloud.io';
+
 	description: INodeTypeDescription = {
 		displayName: 'Execute Private Workflow',
 		name: 'privateWorkflow',
@@ -47,11 +47,115 @@ export class PrivateWorkflow implements INodeType {
 				description: 'The private workflow path to invoke.',
 			},
 			{
-				displayName: 'Payload (JSON)',
-				name: 'payload',
+				displayName: 'Payload',
+				name: 'payloadType',
+				type: 'options',
+				default: 'json',
+				options: [
+					{
+						name: 'JSON (Input)',
+						value: 'json',
+						description: 'Use the input JSON as the workflow payload',
+					},
+					// {
+					// 	name: 'Text',
+					// 	value: 'text',
+					// 	description: 'Specify text to send as the workflow payload',
+					// },
+					{
+						name: 'Binary File',
+						value: 'binary',
+						description: 'Use a binary file from the input as the workflow payload',
+					},
+				],
+			},
+			{
+				displayName: 'JSON Source',
+				name: 'jsonSource',
+				type: 'options',
+				default: 'input',
+				options: [
+					{
+						name: 'Input JSON',
+						value: 'input',
+						description: 'Use the incoming item JSON as the payload',
+					},
+					{
+						name: 'Custom JSON',
+						value: 'custom',
+						description: 'Provide JSON manually or via expression',
+					},
+				],
+				displayOptions: {
+					show: {
+						payloadType: ['json'],
+					},
+				},
+			},
+			{
+				displayName: 'Text',
+				name: 'textValue',
+				type: 'string',
+				default: '',
+				displayOptions: {
+					show: {
+						payloadType: ['text'],
+					},
+				},
+			},
+			{
+				displayName: 'Binary Selection',
+				name: 'binarySelection',
+				type: 'options',
+				default: 'byName',
+				options: [
+					{ name: 'By Property Name', value: 'byName' },
+					{ name: 'First Binary Property', value: 'first' },
+				],
+				displayOptions: {
+					show: {
+						payloadType: ['binary'],
+					},
+				},
+			},
+			{
+				displayName: 'Binary Property',
+				name: 'binaryPropertyName',
+				type: 'string',
+				default: 'file',
+				displayOptions: {
+					show: {
+						payloadType: ['binary'],
+						binarySelection: ['byName'],
+					},
+				},
+			},
+			{
+				displayName: 'JSON',
+				name: 'jsonText',
+				type: 'string',
+				default: '',
+				placeholder: '{ "foo": "bar" }',
+				description: 'JSON object or expression that evaluates to an object',
+				displayOptions: {
+					show: {
+						payloadType: ['json'],
+						jsonSource: ['custom'],
+					},
+				},
+			},
+			{
+				displayName: 'JSON',
+				name: 'jsonValue',
 				type: 'json',
-				default: '{{ $json }}',
-				description: 'The JSON payload to send to the Private Workflow.',
+				default: {},
+				description: 'JSON object or expression that evaluates to an object',
+				displayOptions: {
+					show: {
+						payloadType: ['json'],
+						jsonSource: ['custom'],
+					},
+				},
 			},
 			{
 				displayName: 'Wait for Response',
@@ -76,141 +180,224 @@ export class PrivateWorkflow implements INodeType {
 				},
 				description: 'Maximum time to wait for a workflow response.',
 			},
-			{
-				displayName: 'Encrypt Workflow Payload in Transit',
-				name: 'encryptPayload',
-				type: 'boolean',
-				default: false,
-				description:
-					'Encrypt the workflow payload in transit between n8n and the Private Workflow. Configure your public key in the credential.',
-				hint:
-				  'When enabled, all requests and responses for this execution are automatically encrypted and decrypted. No additional configuration is required on downstream Private Workflow nodes.',
-			}
-		]
+			// {
+			// 	displayName: 'Encrypt Workflow Payload in Transit',
+			// 	name: 'encryptPayload',
+			// 	type: 'boolean',
+			// 	default: false,
+			// 	description:
+			// 		'Encrypt the workflow payload in transit between n8n and the Private Workflow. Configure your public key in the credential.',
+			// 	hint: 'When enabled, all requests and responses for this execution are automatically encrypted and decrypted. No additional configuration is required on downstream Private Workflow nodes.',
+			// },
+		],
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-
 		const self = this;
 		const items = this.getInputData();
 		const ackData: INodeExecutionData[] = [];
 		const completedData: INodeExecutionData[] = [];
 
-		// Get credentials
+		// Get credentials (keep existing behavior)
 		const creds = await this.getCredentials('privateWorkflowApiPublicKey');
 		const apiKey = creds.apiKey as string;
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-				// Extract parameters
-				const hubBase = "https://hub.n8ncloud.io";
-				const workflowName = this.getNodeParameter('workflowName', i) as string;
-				if (!workflowName)
-				{
-					throw new NodeOperationError(this.getNode(), "Workflow name is required.");
-				}
-
-				const item = items[i];
-
-				let encodedPayload: string;
-				let payloadLength: number;
 
 				// ------------------------------------------------------------
-				// BINARY PAYLOAD
+				// Get the hubBase, extract the hubProfile and setup all the URL's and profile parameters
 				// ------------------------------------------------------------
-				if (item.binary && Object.keys(item.binary).length > 0) {
-
-					const binaryPropertyName = Object.keys(item.binary)[0];
-					const binary = item.binary[binaryPropertyName];
-
-					// n8n already stores binary.data as base64
-					encodedPayload = binary.data;
-
-					// Compute actual byte length from base64
-					payloadLength = Buffer.byteLength(binary.data, 'base64');
-
-					this.logger.info(
-						`Encoded binary payload as base64 (${payloadLength} bytes, ${binary.mimeType})`
-					);
-				}
-				// ------------------------------------------------------------
-				// JSON PAYLOAD
-				// ------------------------------------------------------------
-				else {
-					const payload = this.getNodeParameter('payload', i);
-
-					if (typeof payload === 'string') {
-						try {
-							JSON.parse(payload);
-							encodedPayload = payload;
-						}
-						catch {
-							throw new NodeOperationError(
-								this.getNode(),
-								'Payload must be valid JSON. Do not mix JSON and expressions.',
-								{ itemIndex: i }
-							);
-						}
-					}
-					else {
-						encodedPayload = JSON.stringify(payload);
-					}
-
-					payloadLength = encodedPayload.length;
-
-					this.logger.info(
-						`Encoded JSON payload (${payloadLength} chars)`
-					);
-				}
-
-				const waitForResponse = this.getNodeParameter('waitForResponse', i) as boolean;
-
-				let waitTimeout = 0;
-				if (waitForResponse) {
-					waitTimeout = this.getNodeParameter('waitTimeout', i) as number;
-				}
-
+				const hubBase = PrivateWorkflow.HUB_BASE;
 				const hubService = new HubUrlService(hubBase);
 				const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
 
 				const hubUrl = hubInfo?.hubUrl;
-				if (!hubUrl)
-				{
-					throw new NodeOperationError(this.getNode(), 'Hub URL is unavailable.  Hub service is down.');
+				if (!hubUrl) {
+					throw new NodeOperationError(
+						this.getNode(),
+						'Hub URL is unavailable.  Hub service is down.',
+						{
+							itemIndex: i,
+						},
+					);
 				}
-				const hubPath = hubInfo.accountPath + "/" + workflowName;
+
+				const workflowName = this.getNodeParameter('workflowName', i) as string;
+				if (!workflowName) {
+					throw new NodeOperationError(this.getNode(), 'Workflow name is required.', {
+						itemIndex: i,
+					});
+				}
+
+				const hubPath = hubInfo.accountPath + '/' + workflowName;
 				const blobUrl = hubInfo?.blobStorageUrl;
-				if (!blobUrl)
-				{
-					throw new NodeOperationError(this.getNode(), 'Blob URL is unavailable.  Hub service is down.');
+				if (!blobUrl) {
+					throw new NodeOperationError(
+						this.getNode(),
+						'Blob URL is unavailable.  Hub service is down.',
+						{
+							itemIndex: i,
+						},
+					);
 				}
+
 				const apiUrl = hubInfo?.apiUrl;
-				if (!apiUrl)
-				{
-					throw new NodeOperationError(this.getNode(), 'Endpoint URL is unavailable.  Hub service is down.');
+				if (!apiUrl) {
+					throw new NodeOperationError(
+						this.getNode(),
+						'Endpoint URL is unavailable.  Hub service is down.',
+						{
+							itemIndex: i,
+						},
+					);
 				}
+
 				self.logger.info(`Resolved  API url: ${apiUrl}`);
 				self.logger.info(`Resolved  Hub url: ${hubUrl}`);
 				self.logger.info(`Resolved Blob url: ${blobUrl}`);
 
-				// Construct target URL
+				// Construct target URL (keep existing behavior)
 				const normalizedUrl = apiUrl.replace(/\/+$/, '');
 				const normalizedPath = hubPath.replace(/^\/+/, '');
 				const targetUrl = `${normalizedUrl}/${normalizedPath}`;
 
 				// ------------------------------------------------------------
-				// Decide payload transport (inline vs reference)
+				// Process the item
 				// ------------------------------------------------------------
-				const useReference = payloadLength > 64 * 1024 && !!blobUrl; // threshold example
+				const item = items[i];
+
+				// ------------------------------------------------------------
+				// Extract new node parameters
+				// ------------------------------------------------------------
+				const payloadType = this.getNodeParameter('payloadType', i) as 'json' | 'binary';
+
+				const waitForResponse = this.getNodeParameter('waitForResponse', i) as boolean;
+				let waitTimeout = 0;
+				if (waitForResponse) {
+					waitTimeout = this.getNodeParameter('waitTimeout', i) as number;
+				}
+
+				// ------------------------------------------------------------
+				// Build the payload based on user-selected payloadType
+				// ------------------------------------------------------------
+				let encodedPayload: string;
+				let payloadLength: number;
+				let payloadEncoding: 'json' | 'base64' | 'text' = 'json';
+
+				if (payloadType === 'binary') {
+					const binarySelection = this.getNodeParameter('binarySelection', i) as 'byName' | 'first';
+					const configuredBinaryPropertyName = this.getNodeParameter(
+						'binaryPropertyName',
+						i,
+					) as string;
+
+					if (!item.binary || Object.keys(item.binary).length === 0) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'Payload is set to Binary File, but no binary data exists on the incoming item.',
+							{ itemIndex: i },
+						);
+					}
+
+					let binaryPropertyNameToUse: string;
+
+					if (binarySelection === 'first') {
+						binaryPropertyNameToUse = Object.keys(item.binary)[0];
+					} else {
+						// byName
+						binaryPropertyNameToUse = configuredBinaryPropertyName || 'file';
+						if (!item.binary[binaryPropertyNameToUse]) {
+							throw new NodeOperationError(
+								this.getNode(),
+								`Binary property "${binaryPropertyNameToUse}" was not found on the incoming item.`,
+								{ itemIndex: i },
+							);
+						}
+					}
+
+					const binary = item.binary[binaryPropertyNameToUse];
+
+					if (!binary?.data || typeof binary.data !== 'string') {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Binary property "${binaryPropertyNameToUse}" does not contain valid base64 data.`,
+							{ itemIndex: i },
+						);
+					}
+
+					// n8n stores binary.data as base64 already
+					encodedPayload = binary.data;
+					payloadLength = Buffer.byteLength(binary.data, 'base64');
+					payloadEncoding = 'base64';
+
+					this.logger.info(
+						`Encoded binary payload "${binaryPropertyNameToUse}" as base64 (${payloadLength} bytes, ${binary.mimeType ?? 'unknown mime'})`,
+					);
+				} else {
+					// payloadType === 'json'
+					const jsonSource = this.getNodeParameter('jsonSource', i) as 'input' | 'custom';
+
+					let objToSend: any;
+
+					if (jsonSource === 'input') {
+						objToSend = item.json ?? {};
+					} else {
+						// custom JSON (Text / Expression)
+						const raw = this.getNodeParameter('jsonText', i) as unknown;
+
+						if (raw === null || raw === undefined) {
+							throw new NodeOperationError(
+								this.getNode(),
+								'JSON is required when JSON Source is custom.',
+								{
+									itemIndex: i,
+								},
+							);
+						}
+
+						if (typeof raw === 'string') {
+							// If user typed JSON text (or an expression produced a JSON string)
+							try {
+								objToSend = JSON.parse(raw);
+							} catch {
+								throw new NodeOperationError(this.getNode(), 'Invalid JSON in JSON field.', {
+									itemIndex: i,
+								});
+							}
+						} else if (typeof raw === 'object' && !Array.isArray(raw)) {
+							// If expression evaluated to an object
+							objToSend = raw;
+						} else {
+							throw new NodeOperationError(
+								this.getNode(),
+								'JSON field must be a JSON object or a JSON string that parses to an object.',
+								{ itemIndex: i },
+							);
+						}
+					}
+
+					encodedPayload = JSON.stringify(objToSend);
+					payloadLength = Buffer.byteLength(encodedPayload, 'utf8');
+					payloadEncoding = 'json';
+
+					this.logger.info(`Encoded JSON payload (${payloadLength} bytes)`);
+				}
+
+				// ------------------------------------------------------------
+				// Decide payload transport (inline vs reference) - keep existing behavior
+				// (You said you want to "forget" this later; leaving it intact for now.)
+				// ------------------------------------------------------------
+				const useReference = payloadLength > hubInfo.maxPayload && !!blobUrl;
 				let payload: PrivateWorkflowPayload;
 
 				if (useReference) {
 					payload = {
 						type: 'reference',
-						value: '<reference-url>', // populated later
+						value: '<reference-url>', // TODO: populate via upload class before sending
 						length: payloadLength,
 						isEncrypted: false,
-						encoding: item.binary ? 'base64' : 'json',
+						encoding: payloadEncoding,
 					};
 				} else {
 					payload = {
@@ -218,89 +405,86 @@ export class PrivateWorkflow implements INodeType {
 						value: encodedPayload,
 						length: payloadLength,
 						isEncrypted: false,
-						encoding: item.binary ? 'base64' : 'json',
+						encoding: payloadEncoding,
 					};
 				}
 
+				// ------------------------------------------------------------
+				// Construct request (keep existing behavior)
+				// ------------------------------------------------------------
 				const request: PrivateWorkflowRequest = {
-					correlationId: crypto.randomUUID(),			// Note: the correlationId is generated in the hub
+					correlationId: crypto.randomUUID(), // hub generates correlationId; leaving your placeholder
 					requestId: crypto.randomUUID(),
 					path: hubPath,
 					payload,
-					waitForResponse: waitForResponse,
-					waitTimeout: waitTimeout
+					waitForResponse,
+					waitTimeout,
 				};
 
-				// Send request
+				// Send request (keep existing behavior)
 				const client = new PrivateWorkflowHttpClient({
 					apiKey,
 					verifySSL: !targetUrl.includes('localhost'),
 				});
 
-			  this.logger.info("Calling private workflow at " + targetUrl + " at API Url:" + apiUrl + " apiKey:" + apiKey);
-				this.logger.info(`Outbound payload value      : ${JSON.stringify(payload)}`);
-				this.logger.info(`Outbound payload.value (raw): ${payload.value}`);
-				this.logger.info(`Outbound payload.length     : ${payload.length}`);
+				this.logger.info(
+					'Calling private workflow at ' +
+						targetUrl +
+						' at API Url:' +
+						apiUrl +
+						' apiKey:' +
+						apiKey,
+				);
+				this.logger.info(`Outbound payload      : ${JSON.stringify(payload)}`);
+				this.logger.info(`Outbound payload.length: ${payload.length}`);
 
 				const response = await client.post(targetUrl, request);
 				this.logger.info(JSON.stringify(response));
 
 				// --------------------------------------------------------------------
-				// Output the responses
+				// Output the responses (keep existing behavior)
 				// --------------------------------------------------------------------
-
-				// Defensive: treat 500+ as real failure
 				const statusCode = (response as any)?.statusCode;
 				if (typeof statusCode === 'number' && statusCode >= 500) {
-					throw new NodeOperationError(
-						this.getNode(),
-						`Hub error (${statusCode})`,
-						{ itemIndex: i }
-					);
+					throw new NodeOperationError(this.getNode(), `Hub error (${statusCode})`, {
+						itemIndex: i,
+					});
 				}
 
-				// Always emit ACK (request accepted, correlationId exists)
 				const body = (response as any).body ?? response;
-				if (!body || typeof body !== 'object')
-				{
-					throw new NodeOperationError(this.getNode(), "Invalid response body from hub");
+				if (!body || typeof body !== 'object') {
+					throw new NodeOperationError(this.getNode(), 'Invalid response body from hub', {
+						itemIndex: i,
+					});
 				}
 
 				ackData.push({
 					json: {
 						correlationId: body.correlationId,
-						//requestId: body.requestId,
 						path: body.path,
 						status: body.status,
-						timeStampUtc: body.timeStampUtc
-					}
+						timeStampUtc: body.timeStampUtc,
+					},
 				});
 
-				// Route to Completed output when workflow is finished
-				if (body?.status)
-				{
+				// Completed output when waiting and workflow completed
+				if (body?.status) {
 					if (waitForResponse && body.status === 'Completed') {
-						this.logger.info(`[PrivateWorkflow (execute)] body:${body}`);
-						this.logger.info(`[PrivateWorkflow (execute)] json:${JSON.stringify(body)}`);
 						const result = PrivateWorkflowResponseHydrator.hydrate(body, {
-							binaryPropertyName: 'file',
+							binaryPropertyName: 'file', // you can wire this to a node param later if desired
 						});
 
 						if (result.state === 'completed') {
 							completedData.push(...result.items);
 						}
 					}
+				} else {
+					throw new NodeOperationError(this.getNode(), 'Missing body in response', {
+						itemIndex: i,
+					});
 				}
-				else
-				{
-					throw new NodeOperationError(this.getNode(), "Missing body in response");
-				}
-
 			} catch (error: any) {
-
-				// If user enabled "Continue On Fail", emit error as data
 				if (this.continueOnFail()) {
-
 					ackData.push({
 						json: {
 							error: true,
@@ -310,11 +494,9 @@ export class PrivateWorkflow implements INodeType {
 							itemIndex: i,
 						},
 					});
-
 					continue;
 				}
 
-				// Otherwise, fail the node properly
 				if (error instanceof NodeOperationError) {
 					throw error;
 				}
@@ -322,10 +504,11 @@ export class PrivateWorkflow implements INodeType {
 				throw new NodeOperationError(
 					this.getNode(),
 					error.message || 'Unexpected error executing private workflow',
-					{ itemIndex: i }
+					{ itemIndex: i },
 				);
 			}
 		}
+
 		return [ackData, completedData];
 	}
 }
