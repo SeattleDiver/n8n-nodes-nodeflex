@@ -9,6 +9,7 @@ import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
 import { PrivateWorkflowRequest } from './PrivateWorkflowRequest';
 import { PrivateWorkflowResponse } from './PrivateWorkflowResponse';
 import { SignalRClientConfig } from './SignalRClientConfig';
+import { WorkflowHubService } from './WorkflowHubService';
 
 // ====================================================================
 // Helpers
@@ -28,11 +29,13 @@ export class SignalRPrivateWorkflowClient {
 	private conn: HubConnection | null = null;
 	private client!: SignalRClient; // wrapper
 	private readonly cfg: SignalRClientConfig;
+	private hubService: WorkflowHubService;
 
 	private onceResolvers: Array<() => void> = [];
 
 	constructor(cfg: SignalRClientConfig) {
 		this.cfg = cfg;
+		this.hubService = cfg.hubService;
 
 		this.log('info', 'SignalRPrivateWorkflowClient created', {
 			hubUrl: cfg.hubUrl,
@@ -40,6 +43,16 @@ export class SignalRPrivateWorkflowClient {
 			apiKeySet: Boolean(cfg.apiKey),
 			tokenSet: Boolean(cfg.accessToken)
 		});
+	}
+
+	// Get the hubService
+	public getHubService(): WorkflowHubService {
+		return this.hubService;
+	}
+
+	// Get the API key used for this connection
+	public getApiKey(): string | undefined {
+		return this.cfg.apiKey;
 	}
 
 	// ------------------------------------------------------------------

@@ -107,6 +107,65 @@ export class GetPrivateWorkflowResult implements INodeType {
 		}
 
 		// ------------------------------------------------------------
+		// Normalize the payload if reference type
+		// ------------------------------------------------------------
+		let normalizedPayload = payload;
+		if (status === 'Completed' && payload?.type === 'reference') {
+
+			const referenceUrl = payload.value;
+			if (!referenceUrl) {
+				throw new NodeOperationError(
+					this.getNode(),
+					'Reference payload missing URL'
+				);
+			}
+
+			this.logger.info(
+				`[GetPrivateWorkflowResult] Downloading reference payload from ${referenceUrl}`
+			);
+
+			// IMPORTANT: encoding: null returns a Buffer
+			const response = await this.helpers.httpRequest({
+				method: 'GET',
+				url: referenceUrl,
+				headers: {
+					'x-api-key': apiKey,
+				},
+	//			encoding: JSON.stringify(payload.encoding),
+			});
+
+			const buffer = Buffer.isBuffer(response)
+				? response
+				: Buffer.from(response);
+
+			let decodedValue: string;
+
+			switch (payload.encoding) {
+				case 'base64':
+					decodedValue = buffer.toString('base64');
+					break;
+
+				case 'json':
+				case 'text':
+					decodedValue = buffer.toString('utf8');
+					break;
+
+				default:
+					throw new NodeOperationError(
+						this.getNode(),
+						`Unsupported payload encoding: ${payload.encoding}`
+					);
+			}
+
+			normalizedPayload = {
+				...payload,
+				type: 'inline',
+				value: decodedValue,
+			};
+		}
+
+
+		// ------------------------------------------------------------
 		// Pending states
 		// ------------------------------------------------------------
 		if (status === 'Queued' || status === 'Running' || status === 'Pending') {
@@ -135,12 +194,12 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// ------------------------------------------------------------
 		// Completed WITH payload
 		// ------------------------------------------------------------
-		if (status === 'Completed' && payload?.type === 'inline') {
+		if (status === 'Completed' && normalizedPayload?.type === 'inline') {
 			// -------------------------
 			// JSON
 			// -------------------------
-			if (payload.encoding === 'json') {
-				const parsed = JSON.parse(payload.value);
+			if (normalizedPayload.encoding === 'json') {
+				const parsed = JSON.parse(normalizedPayload.value);
 
 				completed.push({
 					json: parsed,
@@ -150,10 +209,10 @@ export class GetPrivateWorkflowResult implements INodeType {
 			// -------------------------
 			// TEXT
 			// -------------------------
-			else if (payload.encoding === 'text') {
+			else if (normalizedPayload.encoding === 'text') {
 				completed.push({
 					json: {
-						text: payload.value,
+						text: normalizedPayload.value,
 					},
 				});
 			}
@@ -161,8 +220,8 @@ export class GetPrivateWorkflowResult implements INodeType {
 			// -------------------------
 			// BINARY (base64)
 			// -------------------------
-			else if (payload.encoding === 'base64') {
-				const binaryData = Buffer.from(payload.value, 'base64');
+			else if (normalizedPayload.encoding === 'base64') {
+				const binaryData = Buffer.from(normalizedPayload.value, 'base64');
 
 				completed.push({
 					json: {
@@ -180,7 +239,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 			} else {
 				throw new NodeOperationError(
 					this.getNode(),
-					`Unsupported payload encoding: ${payload.encoding}`,
+					`Unsupported payload encoding: ${normalizedPayload.encoding}`,
 				);
 			}
 

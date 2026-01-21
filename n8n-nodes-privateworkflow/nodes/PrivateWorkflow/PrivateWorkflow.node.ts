@@ -12,9 +12,9 @@ import { WorkflowHubService } from '../../library/WorkflowHubService';
 import { PrivateWorkflowRequest } from '../../library/PrivateWorkflowRequest';
 import { PrivateWorkflowResponseHydrator } from '../../library/PrivateWorkflowResponseHydrator';
 import { PrivateWorkflowPayload } from '../../library/PrivateWorkflowPayload';
+import { WorkflowPayloadBlobTransport } from '../../library/WorkflowPayloadBlobTransport';
 
 export class PrivateWorkflow implements INodeType {
-
 	private static readonly HUB_BASE = 'https://hub.n8ncloud.io';
 
 	description: INodeTypeDescription = {
@@ -204,7 +204,6 @@ export class PrivateWorkflow implements INodeType {
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-
 				// ------------------------------------------------------------
 				// Get the hubBase, extract the hubProfile and setup all the URL's and profile parameters
 				// ------------------------------------------------------------
@@ -392,14 +391,33 @@ export class PrivateWorkflow implements INodeType {
 				let payload: PrivateWorkflowPayload;
 
 				if (useReference) {
+
+					const blobTransport = new WorkflowPayloadBlobTransport({
+						baseUrl: blobUrl,
+						apiKey,
+					});
+
+					const buffer =
+						payloadEncoding === 'base64'
+							? Buffer.from(encodedPayload, 'base64')
+							: Buffer.from(encodedPayload, 'utf8');
+
+					const upload = await blobTransport.upload(buffer);
+
 					payload = {
 						type: 'reference',
-						value: '<reference-url>', // TODO: populate via upload class before sending
+						value: upload.url,
 						length: payloadLength,
 						isEncrypted: false,
 						encoding: payloadEncoding,
 					};
+
+					this.logger.info(
+						`[PrivateWorkflow (execute)] Payload uploaded (${payloadLength} bytes) → ${upload.url}`,
+					);
+
 				} else {
+
 					payload = {
 						type: 'inline',
 						value: encodedPayload,

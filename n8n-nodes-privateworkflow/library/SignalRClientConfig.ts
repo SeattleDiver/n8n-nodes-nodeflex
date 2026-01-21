@@ -1,5 +1,6 @@
 import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
 import { PrivateWorkflowRequest } from './PrivateWorkflowRequest';
+import { WorkflowHubService } from './WorkflowHubService';
 
 // ------------------- Interfaces (unchanged) -------------------
 export interface SignalRClientConfig {
@@ -7,6 +8,7 @@ export interface SignalRClientConfig {
     hubPath: string;
     apiKey?: string;
     accessToken?: string;
+		hubService: WorkflowHubService;
     logLevel?: 'none' | 'info' | 'debug';
     isSingleNodeRun?: boolean;
 

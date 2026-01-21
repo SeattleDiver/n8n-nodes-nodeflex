@@ -141,6 +141,7 @@ export class PrivateWorkflowTrigger implements INodeType {
             hubPath,
             apiKey,
             accessToken,
+						hubService: hubInfo,
             logLevel: 'info',
 						isSingleNodeRun: false,
 			      logger: {
@@ -156,7 +157,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 						// -------------------------------------------------------------------------------------------------------------------------------------------
 						onExecute: async ({ request, inlineJson, inlineText, payload }) => {
 
-							this.logger.info(`[PrivateWorkflowTrigger] JSON : ${inlineJson}`)
+							this.logger.info(`[PrivateWorkflowTrigger] onExecute()`);
 							try {
 								// Prepare the item
 								const raw = inlineJson ?? inlineText ?? null;
@@ -198,20 +199,50 @@ export class PrivateWorkflowTrigger implements INodeType {
 								// ------------------------------------------------------------
 								let normalizedPayload = wfPayload;
 
+								this.logger.info(`[PrivateWorkflowTrigger] payloadType = ${wfPayload.type}`);
+
 								if (wfPayload.type === 'reference') {
 									const referenceUrl = wfPayload.value;
+
+									this.logger.info(`[PrivateWorkflowTrigger] reference URL ${referenceUrl}`)
+
 									if (!referenceUrl) {
 										throw new NodeOperationError(this.getNode(), 'Reference payload missing value/url');
 									}
 
-									const response = await fetch(referenceUrl);
+									const response = await fetch(referenceUrl, {
+										headers: {
+											'x-api-key': apiKey, // IMPORTANT if your blob endpoint requires it
+										},
+									});
+
+									if (!response.ok)
+									{
+										throw new NodeOperationError(this.getNode(), `Failed to download reference payload (${response.status})`)
+									}
+
 									const buffer = Buffer.from(await response.arrayBuffer());
+									let decodedValue: string;
+
+									switch(wfPayload.encoding)
+									{
+										case 'base64':
+											decodedValue = buffer.toString('base64');
+											break;
+
+										case 'json':
+										case 'text':
+											decodedValue = buffer.toString('utf8');
+											break;
+
+										default:
+											throw new NodeOperationError(this.getNode(), `Unsupported payload encoding: ${wfPayload.encoding}`);
+									}
 
 									normalizedPayload = {
 										...wfPayload,
 										type: 'inline',
-										value: buffer.toString('base64'),
-										encoding: 'base64',
+										value: decodedValue
 									};
 								}
 

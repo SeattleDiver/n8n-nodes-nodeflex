@@ -8,6 +8,7 @@ import {
 } from 'n8n-workflow';
 import { PrivateWorkflowResponseRegistry } from '../../library/PrivateWorkflowResponseRegistry';
 import { PrivateWorkflowPayload, PrivateWorkflowPayloadEncoding } from '../../library/PrivateWorkflowPayload';
+import { WorkflowPayloadBlobTransport } from '../../library/WorkflowPayloadBlobTransport';
 
 export class RespondToPrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
@@ -153,7 +154,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
-		this.logger.info(`getInputData() returns: ${JSON.stringify(items)}`)
+		//this.logger.info(`getInputData() returns: ${JSON.stringify(items)}`)
 		const outputItems: INodeExecutionData[] = [];
 
 	  const correlationId = this.getNodeParameter('correlationId', 0) as string;
@@ -390,7 +391,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			}
 
 			// ------------------------------------------------------------------------------------
-			// Build canonical PrivateWorkflowPayload for hub
+			// Build serialized payload value
 			// ------------------------------------------------------------------------------------
 			const serializedValue =
 				payload == null
@@ -399,13 +400,84 @@ export class RespondToPrivateWorkflow implements INodeType {
 						? payload
 						: JSON.stringify(payload);
 
-			const hubPayload: PrivateWorkflowPayload = {
-				type: 'inline',
-				value: serializedValue,
-				encoding,
-				isEncrypted: false,
-				length: serializedValue.length,
-			};
+			const payloadLength =
+				encoding === 'base64'
+					? Buffer.byteLength(serializedValue, 'base64')
+					: Buffer.byteLength(serializedValue, 'utf8');
+
+			// ------------------------------------------------------------------------------------
+			// Decide transport: inline vs reference (Respond node)
+			// ------------------------------------------------------------------------------------
+			const hubService = entry.client.getHubService();
+
+			const useReference =
+				hubService.useStorage &&
+				payloadLength > hubService.maxPayload &&
+				!!hubService.blobStorageUrl;
+
+			// ------------------------------------------------------------------------------------
+			// Build canonical PrivateWorkflowPayload for hub
+			// ------------------------------------------------------------------------------------
+			let hubPayload: PrivateWorkflowPayload;
+
+			if (useReference) {
+
+				// Build the buffer to upload based on encoding
+				const buffer =
+					encoding === 'base64'
+						? Buffer.from(serializedValue, 'base64')
+						: Buffer.from(serializedValue, 'utf8');
+
+				// Create the blob transport using hub service info
+				const apiKey = entry.client.getApiKey();
+				if (!apiKey)
+				{
+					throw new NodeOperationError(this.getNode(), 'API key is not available on Private Workflow Trigger');
+				}
+				const blobTransport = new WorkflowPayloadBlobTransport({
+					baseUrl: hubService.blobStorageUrl,
+					apiKey,
+				});
+
+				// Perform the upload (multipart/form-data, field name = "File")
+				const uploadResult = await blobTransport.upload(buffer, {
+					fileName:
+						encoding === 'base64'
+							? 'response.bin'
+							: encoding === 'json'
+								? 'response.json'
+								: 'response.txt',
+					contentType:
+						encoding === 'base64'
+							? 'application/octet-stream'
+							: encoding === 'json'
+								? 'application/json'
+								: 'text/plain',
+				});
+
+				// Build reference payload
+				hubPayload = {
+					type: 'reference',
+					value: uploadResult.url, // ✅ THIS IS THE URL YOU WANTED
+					encoding,
+					isEncrypted: false,
+					length: payloadLength,
+				};
+
+				this.logger?.info?.(
+					`[RespondToPrivateWorkflow] Payload uploaded (${payloadLength} bytes) → ${uploadResult.url}`
+				);
+
+
+			} else {
+				hubPayload = {
+					type: 'inline',
+					value: serializedValue,
+					encoding,
+					isEncrypted: false,
+					length: payloadLength,
+				};
+			}
 
 			// ------------------------------------------------------------------------------------
 			// Send a single response to the hub AFTER collecting payload
