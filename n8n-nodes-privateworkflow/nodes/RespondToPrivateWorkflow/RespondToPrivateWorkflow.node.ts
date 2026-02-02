@@ -157,7 +157,8 @@ export class RespondToPrivateWorkflow implements INodeType {
 		//this.logger.info(`getInputData() returns: ${JSON.stringify(items)}`)
 		const outputItems: INodeExecutionData[] = [];
 
-	  const correlationId = this.getNodeParameter('correlationId', 0) as string;
+	  let correlationId = this.getNodeParameter('correlationId', 0) as string;
+		correlationId = correlationId.trim();
 		const entry = PrivateWorkflowResponseRegistry.get(correlationId);
 
 		if (!entry) {

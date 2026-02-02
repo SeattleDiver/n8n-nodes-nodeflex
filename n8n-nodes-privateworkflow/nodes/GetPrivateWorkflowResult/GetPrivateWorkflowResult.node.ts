@@ -67,7 +67,8 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// ------------------------------------------------------------
 		// Parameters (SINGLE-SHOT)
 		// ------------------------------------------------------------
-		const correlationId = this.getNodeParameter('correlationId', 0) as string;
+		let correlationId = this.getNodeParameter('correlationId', 0) as string;
+		correlationId = correlationId.trim();
 
 		// ------------------------------------------------------------
 		// Resolve execution hub via control plane
