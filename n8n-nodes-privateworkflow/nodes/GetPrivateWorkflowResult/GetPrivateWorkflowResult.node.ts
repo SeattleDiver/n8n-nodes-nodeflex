@@ -8,7 +8,6 @@ import {
 
 import { HubUrlService } from '../../library/HubUrlService';
 import { WorkflowHubService } from '../../library/WorkflowHubService';
-//import { PrivateWorkflowResponseHydrator } from '../../library/PrivateWorkflowResponseHydrator';
 import { PrivateWorkflowPayload } from '../../library/PrivateWorkflowPayload';
 
 export class GetPrivateWorkflowResult implements INodeType {
@@ -20,15 +19,14 @@ export class GetPrivateWorkflowResult implements INodeType {
 		description: 'Retrieves the current status or result of a Private Workflow execution',
 		icon: 'file:cloud-network-download-drum.svg',
 		defaults: {
-			name: 'Get Private Workflow Result',
-			color: '#00c896',
+			name: 'Get Private Workflow Result'
 		},
 		inputs: ['main'],
 		outputs: ['main', 'main'],
 		outputNames: ['Completed', 'Pending'],
 		credentials: [
 			{
-				name: 'privateWorkflowApiPublicKey',
+				name: 'privateWorkflowPublicKeyApi',
 				required: true,
 			},
 		],
@@ -51,7 +49,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// ------------------------------------------------------------
 		// Credentials
 		// ------------------------------------------------------------
-		const creds = (await this.getCredentials('privateWorkflowApiPublicKey')) as {
+		const creds = (await this.getCredentials('privateWorkflowPublicKeyApi')) as {
 			apiKey?: string;
 		};
 
@@ -262,7 +260,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 	// 	// Resolve credentials (PUBLIC)
 	// 	// ------------------------------------------------------------
 	// 	const creds = (await this.getCredentials(
-	// 		'privateWorkflowApiPublicKey'
+	// 		'privateWorkflowPublicKeyApi'
 	// 	)) as {
 	// 		apiKey?: string;
 	// 		publicKey?: string;

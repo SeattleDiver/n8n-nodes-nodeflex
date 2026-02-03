@@ -32,7 +32,7 @@ export class PrivateWorkflow implements INodeType {
 		outputNames: ['Acknowledged', 'Completed'],
 		credentials: [
 			{
-				name: 'privateWorkflowApiPublicKey', // must match your credentials class name
+				name: 'privateWorkflowPublicKeyApi', // must match your credentials class name
 				required: true,
 			},
 		],
@@ -44,7 +44,7 @@ export class PrivateWorkflow implements INodeType {
 				default: '',
 				placeholder: 'e.g. my-workflow',
 				required: true,
-				description: 'The private workflow path to invoke.',
+				description: 'The private workflow path to invoke',
 			},
 			{
 				displayName: 'Payload',
@@ -162,10 +162,11 @@ export class PrivateWorkflow implements INodeType {
 				name: 'waitForResponse',
 				type: 'boolean',
 				default: false,
-				description: 'Wait for the private workflow to send a response (up to 15 seconds).',
+				description: 'Whether or not to wait for the private workflow to send a response',
+				hint: 'If enabled, this node will wait for the workflow to complete'
 			},
 			{
-				displayName: 'Wait for Response Timeout (max 15 seconds)',
+				displayName: 'Wait for Response Timeout',
 				name: 'waitTimeout',
 				type: 'number',
 				default: 5,
@@ -178,7 +179,8 @@ export class PrivateWorkflow implements INodeType {
 						waitForResponse: [true],
 					},
 				},
-				description: 'Maximum time to wait for a workflow response.',
+				description: 'Maximum time to wait for a workflow response',
+				hint: 'Wait time can be up to 15 seconds.'
 			},
 			// {
 			// 	displayName: 'Encrypt Workflow Payload in Transit',
@@ -199,7 +201,7 @@ export class PrivateWorkflow implements INodeType {
 		const completedData: INodeExecutionData[] = [];
 
 		// Get credentials (keep existing behavior)
-		const creds = await this.getCredentials('privateWorkflowApiPublicKey');
+		const creds = await this.getCredentials('privateWorkflowPublicKeyApi');
 		const apiKey = creds.apiKey as string;
 
 		for (let i = 0; i < items.length; i++) {

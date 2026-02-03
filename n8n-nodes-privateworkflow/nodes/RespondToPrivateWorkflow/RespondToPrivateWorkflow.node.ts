@@ -19,8 +19,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 		description: 'Sends a response back to the Private Workflow Trigger via SignalR RESPOND NODE - NEW DEFAULT LOADED',
 		icon: 'file:cloud-network-chevron-response.svg',
 		defaults: {
-			name: 'Respond to Private Workflow',
-			color: '#00c896',
+			name: 'Respond to Private Workflow'
 		},
 		inputs: ['main'],
 		outputs: ['main'],
@@ -35,32 +34,32 @@ export class RespondToPrivateWorkflow implements INodeType {
 					{
 						name: 'All Incoming Items',
 						value: 'allItems',
-						description: 'Return all incoming items as JSON objects (binary data is not supported).'
+						description: 'Return all incoming items as JSON objects (binary data is not supported)'
 					},
 					{
 						name: 'Binary File',
 						value: 'binary',
-						description: 'Return a binary file from the incoming items.'
+						description: 'Return a binary file from the incoming items'
 					},
 					{
 						name: 'First Incoming Item',
 						value: 'firstItem',
-						description: 'Return the first incoming item as a JSON object (binary data is not supported).'
+						description: 'Return the first incoming item as a JSON object (binary data is not supported)'
 					},
 					{
 						name: 'JSON',
 						value: 'json',
-						description: 'Return a custom JSON object defined in this node.'
+						description: 'Return a custom JSON object defined in this node'
 					},
 					{
 						name: 'No Data',
 						value: 'none',
-						description: 'Return no response payload.'
+						description: 'Return no response payload'
 					},
 					{
 						name: 'Text',
 						value: 'text',
-						description: 'Return a plain text response.'
+						description: 'Return a plain text response'
 					},
 				],
 
@@ -115,7 +114,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 				},
 				options: [
 					{
-						name: 'Choose Automatically from Input',
+						name: 'Choose Automatically From Input',
 						value: 'auto',
 						description: 'Use the first binary property found on the incoming item',
 					},
@@ -132,8 +131,8 @@ export class RespondToPrivateWorkflow implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
-				description:
-					'Select the correlation ID from your Private Workflow Trigger output, e.g. {{ $("Private Workflow Trigger").item.json.__correlationId }}',
+		    // eslint-disable-next-line n8n-nodes-base/node-param-description-miscased-json
+				description: 'Select the correlation ID from your Private Workflow Trigger output, example: {{ $json.__correlationId }}',
 				hint: 'Use expression editor to choose it from your trigger node',
 			},
 			{

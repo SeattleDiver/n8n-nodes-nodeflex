@@ -27,14 +27,13 @@ export class PrivateWorkflowTrigger implements INodeType {
 			description: 'When a remote private workflow is executed',
 			icon: 'file:cloud-network-chevron-request.svg',
 			defaults: {
-				name: 'Private Workflow Trigger',
-				color: '#00c896',
+				name: 'Private Workflow Trigger'
 			},
 			inputs: [],
 			outputs: ['main'],
 			credentials: [
 				{
-					name: 'privateWorkflowApiPrivateKey',
+					name: 'privateWorkflowPrivateKeyApi',
 					required: true,
 				},
 			],
@@ -77,10 +76,8 @@ export class PrivateWorkflowTrigger implements INodeType {
 					name: 'encryptPayload',
 					type: 'boolean',
 					default: false,
-					description:
-						'Encrypt the workflow payload in transit between n8n and the Private Workflow. Configure the private key in the credential.',
-					hint:
-					  'When enabled, all requests and responses for this execution are automatically encrypted and decrypted. No additional configuration is required on downstream Private Workflow nodes.',
+					description: 'Whether or not to encrypt the workflow payload in transit between n8n and the Private Workflow',
+					hint: 'When enabled, all requests and responses for this execution are automatically encrypted and decrypted',
 				}
 			],
 		};
@@ -98,7 +95,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 					throw new NodeOperationError(this.getNode(), "Workflow name is required.");
 				}
 
-				const creds = (await this.getCredentials('privateWorkflowApiPrivateKey')) as {
+				const creds = (await this.getCredentials('privateWorkflowPrivateKeyApi')) as {
       		apiKey?: string;
       		accessToken?: string;
     		} | null;

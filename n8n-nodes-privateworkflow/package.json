@@ -7,7 +7,10 @@
   ],
   "license": "MIT",
   "homepage": "https://github.com/seattlediver/n8n-cloudworkflow#readme",
-  "author": "undefined",
+  "author": {
+    "name": "J. Robert Tryon, Jr.",
+    "email": "bobtryon@n8ncloud.io"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/seattlediver/n8n-cloudworkflow.git"
@@ -30,8 +33,8 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/PrivateWorkflowApiPublicKey.credentials.js",
-      "dist/credentials/PrivateWorkflowApiPrivateKey.credentials.js"
+      "dist/credentials/privateWorkflowPublicKeyApi.credentials.js",
+      "dist/credentials/PrivateWorkflowPrivateKeyApi.credentials.js"
     ],
     "nodes": [
       "dist/nodes/PrivateWorkflowTrigger/PrivateWorkflowTrigger.node.ts",

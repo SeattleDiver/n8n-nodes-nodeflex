@@ -5,51 +5,36 @@ import type {
 	IHttpRequestMethods,
 } from 'n8n-workflow';
 
-export class PrivateWorkflowApiPrivateKey implements ICredentialType {
-	name = 'privateWorkflowApiPrivateKey';
-	displayName = 'Private Workflow Credentials with Private Key';
+export class PrivateWorkflowPublicKeyApi implements ICredentialType {
+	name = 'privateWorkflowPublicKeyApi';
+	displayName = 'Private Workflow Credentials with Public Key API';
 	documentationUrl = 'https://github.com/SeattleDiver/n8ncloud-workflow';
-	description = `Authentication credentials for the Private Workflow with Private Key.
+	description = `Authentication credentials for the Private Workflow with Public Key.
 
 	**Documentation:** [View Setup Guide](https://github.com/SeattleDiver/n8ncloud-workflow)`;
 
 	// 👇 The standard n8n properties definition
 	properties: INodeProperties[] = [
-		// {
-		// 	displayName: 'Environment',
-		// 	name: 'baseUrl',
-		// 	type: 'options',
-		// 	default: 'http://localhost:5268',
-		// 	description: 'Select the environment for the Private Workflow API.',
-		// 	options: [
-		// 		{
-		// 			name: 'Development',
-		// 			value: 'http://localhost:5268',
-		// 		},
-		// 		{
-		// 			name: 'Production',
-		// 			value: 'https://hub.n8ncloud.io',
-		// 		},
-		// 	],
-		// },
 		{
 			displayName: 'API Key',
 			name: 'apiKey',
 			type: 'string',
+	    // eslint-disable-next-line n8n-nodes-base/cred-class-field-type-options-password-missing
 			typeOptions: { password: false },
 			default: '',
 			required: true,
 			description: 'API key for authenticating with the n8nCloud Private Workflow API.',
 		},
 		{
-			displayName: 'Private Key for Payload encryption/decription',
-			name: 'privateKey',
+			displayName: 'Public Key for Payload encryption/decription',
+			name: 'publicKey',
 			type: 'string',
+	    // eslint-disable-next-line n8n-nodes-base/cred-class-field-type-options-password-missing
 			typeOptions: { rows: 5, password: false },
 			default: '',
 			required: false,
-			description: 'Private key used to decrypt/encrypt requests and responses.',
-		},
+			description: 'Public key used to encrypt/decrypt messages with Private Workflow instances.',
+		}
 	];
 
 	// Define the built-in test connection configuration
