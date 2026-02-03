@@ -1,5 +1,5 @@
 {
-  "name": "n8n-nodes-privateworkflow",
+  "name": "@n8ncloud/n8n-nodes-privateworkflow",
   "version": "0.1.0",
   "description": "Execute Private Workflow",
   "keywords": [
