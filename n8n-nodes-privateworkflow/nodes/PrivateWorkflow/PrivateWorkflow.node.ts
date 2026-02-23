@@ -6,13 +6,13 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
-import { PrivateWorkflowHttpClient } from '../../library/PrivateWorkflowHttpClient';
-import { HubUrlService } from '../../library/HubUrlService';
-import { WorkflowHubService } from '../../library/WorkflowHubService';
-import { PrivateWorkflowRequest } from '../../library/PrivateWorkflowRequest';
-import { PrivateWorkflowResponseHydrator } from '../../library/PrivateWorkflowResponseHydrator';
-import { PrivateWorkflowPayload } from '../../library/PrivateWorkflowPayload';
-import { WorkflowPayloadBlobTransport } from '../../library/WorkflowPayloadBlobTransport';
+import { PrivateWorkflowHttpClient } from '../../lib/PrivateWorkflowHttpClient';
+import { HubUrlService } from '../../lib/HubUrlService';
+import { WorkflowHubService } from '../../lib/WorkflowHubService';
+import { PrivateWorkflowRequest } from '../../lib/PrivateWorkflowRequest';
+import { PrivateWorkflowResponseHydrator } from '../../lib/PrivateWorkflowResponseHydrator';
+import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
+import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
 
 export class PrivateWorkflow implements INodeType {
 	private static readonly HUB_BASE = 'https://hub.n8ncloud.io';
@@ -26,7 +26,7 @@ export class PrivateWorkflow implements INodeType {
 		defaults: {
 			name: 'Execute Private Workflow',
 		},
-		icon: 'file:cloud-network.svg',
+		icon: 'file:icon.svg',
 		inputs: ['main'],
 		outputs: ['main', 'main'],
 		outputNames: ['Acknowledged', 'Completed'],

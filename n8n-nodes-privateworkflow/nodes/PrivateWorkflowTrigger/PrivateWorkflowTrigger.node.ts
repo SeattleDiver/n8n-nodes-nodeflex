@@ -7,13 +7,13 @@ import {
 	jsonStringify,
 	INodeExecutionData
 } from 'n8n-workflow';
-//import crypto, { OneShotDigestOptionsWithBufferEncoding } from 'crypto'
-//import crypto from 'crypto'
-import { SignalRPrivateWorkflowClient } from '../../library/SignalRPrivateWorkflowClient'
-import { PrivateWorkflowResponseRegistry } from '../../library/PrivateWorkflowResponseRegistry';
-import { HubUrlService } from "../../library/HubUrlService";
-import { WorkflowHubService } from "../../library/WorkflowHubService";
-import { PrivateWorkflowPayload } from '../../library/PrivateWorkflowPayload';
+
+import { SignalRPrivateWorkflowClient } from '../../lib/SignalRPrivateWorkflowClient'
+import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
+//import { HubUrlService } from "../../library/HubUrlService";
+import { HubProfileService } from "../../lib/HubProfileService";
+import { WorkflowHubService } from "../../lib/WorkflowHubService";
+import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 
 export class PrivateWorkflowTrigger implements INodeType {
 
@@ -25,7 +25,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 			group: ['trigger'],
 			version: 1,
 			description: 'When a remote private workflow is executed',
-			icon: 'file:cloud-network-chevron-request.svg',
+			icon: 'file:icon.svg',
 			defaults: {
 				name: 'Private Workflow Trigger'
 			},
@@ -106,7 +106,9 @@ export class PrivateWorkflowTrigger implements INodeType {
         var apiKey = creds?.apiKey;
 				self.logger.info("Using ApiKey: " + apiKey);
 
-				const hubService = new HubUrlService(hubBase);
+				const hubService = new HubProfileService(hubBase, this);
+
+				// const hubService = new HubUrlService(hubBase);
 				const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
 
 				const hubUrl = hubInfo?.hubUrl;

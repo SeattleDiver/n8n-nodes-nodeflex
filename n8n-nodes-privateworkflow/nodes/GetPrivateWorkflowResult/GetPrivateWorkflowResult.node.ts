@@ -6,9 +6,9 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
-import { HubUrlService } from '../../library/HubUrlService';
-import { WorkflowHubService } from '../../library/WorkflowHubService';
-import { PrivateWorkflowPayload } from '../../library/PrivateWorkflowPayload';
+import { HubUrlService } from '../../lib/HubUrlService';
+import { WorkflowHubService } from '../../lib/WorkflowHubService';
+import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 
 export class GetPrivateWorkflowResult implements INodeType {
 	description: INodeTypeDescription = {
@@ -17,7 +17,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		group: ['input'],
 		version: 1,
 		description: 'Retrieves the current status or result of a Private Workflow execution',
-		icon: 'file:cloud-network-download-drum.svg',
+		icon: 'file:icon.svg',
 		defaults: {
 			name: 'Get Private Workflow Result'
 		},

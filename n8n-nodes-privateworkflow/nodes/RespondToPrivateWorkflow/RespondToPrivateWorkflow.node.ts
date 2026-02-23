@@ -6,9 +6,9 @@ import {
 	IDataObject,
 	NodeOperationError
 } from 'n8n-workflow';
-import { PrivateWorkflowResponseRegistry } from '../../library/PrivateWorkflowResponseRegistry';
-import { PrivateWorkflowPayload, PrivateWorkflowPayloadEncoding } from '../../library/PrivateWorkflowPayload';
-import { WorkflowPayloadBlobTransport } from '../../library/WorkflowPayloadBlobTransport';
+import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
+import { PrivateWorkflowPayload, PrivateWorkflowPayloadEncoding } from '../../lib/PrivateWorkflowPayload';
+import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
 
 export class RespondToPrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
@@ -17,7 +17,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 		group: ['output'],
 		version: 1,
 		description: 'Sends a response back to the Private Workflow Trigger via SignalR RESPOND NODE - NEW DEFAULT LOADED',
-		icon: 'file:cloud-network-chevron-response.svg',
+		icon: 'file:../../icons/cloudNetworkChevronResponse.svg',
 		defaults: {
 			name: 'Respond to Private Workflow'
 		},
