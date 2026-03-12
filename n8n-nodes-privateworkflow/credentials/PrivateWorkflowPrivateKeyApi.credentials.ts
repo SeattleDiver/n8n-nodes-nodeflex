@@ -8,10 +8,10 @@ import type {
 export class PrivateWorkflowPrivateKeyApi implements ICredentialType {
 	name = 'privateWorkflowPrivateKeyApi';
 	displayName = 'Private Workflow Credentials with Private Key API';
-	documentationUrl = 'https://github.com/SeattleDiver/n8ncloud-workflow';
+	documentationUrl = 'https://github.com/SeattleDiver/nodeflex-workflow';
 	description = `Authentication credentials for the Private Workflow with Private Key.
 
-	**Documentation:** [View Setup Guide](https://github.com/SeattleDiver/n8ncloud-workflow)`;
+	**Documentation:** [View Setup Guide](https://github.com/SeattleDiver/nodeflex-workflow)`;
 
 	// 👇 The standard n8n properties definition
 	properties: INodeProperties[] = [
@@ -41,7 +41,7 @@ export class PrivateWorkflowPrivateKeyApi implements ICredentialType {
 	test: ICredentialTestRequest = {
 		request: {
 			method: 'GET' as IHttpRequestMethods,
-			url: '=https://hub.n8ncloud.io/api/apikeys/verify',
+			url: '=https://hub.nodeflex.io/api/apikeys/verify',
 			qs: {
 				apiKey: '={{$credentials.apiKey}}',
 			},

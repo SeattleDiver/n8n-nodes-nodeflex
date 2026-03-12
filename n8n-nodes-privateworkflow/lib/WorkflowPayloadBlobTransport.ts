@@ -4,7 +4,7 @@ export interface WorkflowPayloadBlobTransportConfig {
 	/**
 	 * Blob upload endpoint provided by the hub.
 	 * Example:
-	 *   https://hub.n8ncloud.io/api/blob
+	 *   https://hub.nodeflex.io/api/blob
 	 */
 	baseUrl: string;
 

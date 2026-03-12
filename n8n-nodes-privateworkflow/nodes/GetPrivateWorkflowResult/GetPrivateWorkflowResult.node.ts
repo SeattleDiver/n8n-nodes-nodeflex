@@ -71,7 +71,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// ------------------------------------------------------------
 		// Resolve execution hub via control plane
 		// ------------------------------------------------------------
-		const hubBase = 'https://hub.n8ncloud.io';
+		const hubBase = 'https://hub.nodeflex.io';
 		const hubService: HubUrlService = new HubUrlService(hubBase);
 		const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
 
@@ -278,7 +278,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 	// 	// ------------------------------------------------------------
 	// 	// Resolve execution hub via control plane
 	// 	// ------------------------------------------------------------
-	// 	const hubBase = 'https://hub.n8ncloud.io';
+	// 	const hubBase = 'https://hub.nodeflex.io';
 	// 	const hubService = new HubUrlService(hubBase);
 	// 	const hubInfo: WorkflowHubService | null =
 	// 		await hubService.getHubInfo(apiKey);

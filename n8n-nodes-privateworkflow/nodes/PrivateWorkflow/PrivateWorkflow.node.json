@@ -6,12 +6,12 @@
 	"resources": {
 		"credentialDocumentation": [
 			{
-				"url": "https://www.n8ncloud.io/docs/credentials"
+				"url": "https://www.nodeflex.io/docs/credentials"
 			}
 		],
 		"primaryDocumentation": [
 			{
-				"url": "https://www.n8ncloud.io/docs"
+				"url": "https://www.nodeflex.io/docs"
 			}
 		]
 	}

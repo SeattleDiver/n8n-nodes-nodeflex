@@ -15,7 +15,7 @@ import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
 
 export class PrivateWorkflow implements INodeType {
-	private static readonly HUB_BASE = 'https://hub.n8ncloud.io';
+	private static readonly HUB_BASE = 'https://hub.nodeflex.io';
 
 	description: INodeTypeDescription = {
 		displayName: 'Execute Private Workflow',

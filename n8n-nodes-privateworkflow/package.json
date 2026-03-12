@@ -1,5 +1,5 @@
 {
-  "name": "@n8ncloud/n8n-nodes-privateworkflow",
+  "name": "@nodeflex/n8n-nodes-privateworkflow",
   "version": "0.1.0",
   "description": "Execute Private Workflow",
   "keywords": [
@@ -9,7 +9,7 @@
   "homepage": "https://github.com/seattlediver/n8n-cloudworkflow#readme",
   "author": {
     "name": "J. Robert Tryon, Jr.",
-    "email": "bobtryon@n8ncloud.io"
+    "email": "bobtryon@nodeflex.io"
   },
   "repository": {
     "type": "git",

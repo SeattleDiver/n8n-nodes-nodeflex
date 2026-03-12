@@ -88,7 +88,7 @@ export class PrivateWorkflowTrigger implements INodeType {
     async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
 
 			  const self = this;
-				const hubBase = "https://hub.n8ncloud.io";
+				const hubBase = "https://hub.nodeflex.io";
 				const workflowName = this.getNodeParameter('workflowName', 0) as string;
 				if (!workflowName)
 				{
