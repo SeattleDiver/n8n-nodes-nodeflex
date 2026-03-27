@@ -6,6 +6,8 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
+import { randomUUID } from 'crypto';
+
 import { PrivateWorkflowHttpClient } from '../../lib/PrivateWorkflowHttpClient';
 import { HubUrlService } from '../../lib/HubUrlService';
 import { WorkflowHubService } from '../../lib/WorkflowHubService';
@@ -254,9 +256,7 @@ export class PrivateWorkflow implements INodeType {
 					);
 				}
 
-				self.logger.info(`Resolved  API url: ${apiUrl}`);
-				self.logger.info(`Resolved  Hub url: ${hubUrl}`);
-				self.logger.info(`Resolved Blob url: ${blobUrl}`);
+				self.logger.info(`Resolved hub URLs for ${hubPath}`);
 
 				// Construct target URL (keep existing behavior)
 				const normalizedUrl = apiUrl.replace(/\/+$/, '');
@@ -339,7 +339,7 @@ export class PrivateWorkflow implements INodeType {
 					// payloadType === 'json'
 					const jsonSource = this.getNodeParameter('jsonSource', i) as 'input' | 'custom';
 
-					let objToSend: any;
+					let objToSend: Record<string, unknown>;
 
 					if (jsonSource === 'input') {
 						objToSend = item.json ?? {};
@@ -368,7 +368,7 @@ export class PrivateWorkflow implements INodeType {
 							}
 						} else if (typeof raw === 'object' && !Array.isArray(raw)) {
 							// If expression evaluated to an object
-							objToSend = raw;
+							objToSend = raw as Record<string, unknown>;
 						} else {
 							throw new NodeOperationError(
 								this.getNode(),
@@ -433,8 +433,8 @@ export class PrivateWorkflow implements INodeType {
 				// Construct request (keep existing behavior)
 				// ------------------------------------------------------------
 				const request: PrivateWorkflowRequest = {
-					correlationId: crypto.randomUUID(), // hub generates correlationId; leaving your placeholder
-					requestId: crypto.randomUUID(),
+					correlationId: randomUUID(),
+					requestId: randomUUID(),
 					path: hubPath,
 					payload,
 					waitForResponse,
@@ -447,31 +447,21 @@ export class PrivateWorkflow implements INodeType {
 					verifySSL: !targetUrl.includes('localhost'),
 				});
 
-				this.logger.info(
-					'Calling private workflow at ' +
-						targetUrl +
-						' at API Url:' +
-						apiUrl +
-						' apiKey:' +
-						apiKey,
-				);
-				this.logger.info(`Outbound payload      : ${JSON.stringify(payload)}`);
-				this.logger.info(`Outbound payload.length: ${payload.length}`);
+				this.logger.info(`Calling private workflow at ${targetUrl}`);
 
 				const response = await client.post(targetUrl, request);
-				this.logger.info(JSON.stringify(response));
 
 				// --------------------------------------------------------------------
 				// Output the responses (keep existing behavior)
 				// --------------------------------------------------------------------
-				const statusCode = (response as any)?.statusCode;
+				const statusCode = (response as Record<string, unknown>)?.statusCode;
 				if (typeof statusCode === 'number' && statusCode >= 500) {
 					throw new NodeOperationError(this.getNode(), `Hub error (${statusCode})`, {
 						itemIndex: i,
 					});
 				}
 
-				const body = (response as any).body ?? response;
+				const body = ((response as Record<string, unknown>).body ?? response) as Record<string, unknown>;
 				if (!body || typeof body !== 'object') {
 					throw new NodeOperationError(this.getNode(), 'Invalid response body from hub', {
 						itemIndex: i,
@@ -480,10 +470,10 @@ export class PrivateWorkflow implements INodeType {
 
 				ackData.push({
 					json: {
-						correlationId: body.correlationId,
-						path: body.path,
-						status: body.status,
-						timeStampUtc: body.timeStampUtc,
+						correlationId: body.correlationId as string,
+						path: body.path as string,
+						status: body.status as string,
+						timeStampUtc: body.timeStampUtc as string,
 					},
 				});
 
@@ -503,14 +493,13 @@ export class PrivateWorkflow implements INodeType {
 						itemIndex: i,
 					});
 				}
-			} catch (error: any) {
+			} catch (error) {
 				if (this.continueOnFail()) {
+					const message = error instanceof Error ? error.message : String(error);
 					ackData.push({
 						json: {
 							error: true,
-							message: error.message,
-							name: error.name,
-							stack: error.stack,
+							message,
 							itemIndex: i,
 						},
 					});
@@ -521,9 +510,10 @@ export class PrivateWorkflow implements INodeType {
 					throw error;
 				}
 
+				const message = error instanceof Error ? error.message : 'Unexpected error executing private workflow';
 				throw new NodeOperationError(
 					this.getNode(),
-					error.message || 'Unexpected error executing private workflow',
+					message,
 					{ itemIndex: i },
 				);
 			}

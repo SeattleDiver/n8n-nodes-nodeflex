@@ -12,11 +12,11 @@ import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTrans
 
 export class RespondToPrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Respond to Private Workflow 0031',
+		displayName: 'Respond to Private Workflow',
 		name: 'respondToPrivateWorkflow',
 		group: ['output'],
 		version: 1,
-		description: 'Sends a response back to the Private Workflow Trigger via SignalR RESPOND NODE - NEW DEFAULT LOADED',
+		description: 'Sends a response back to the Private Workflow Trigger',
 		icon: 'file:icon.svg',
 		defaults: {
 			name: 'Respond to Private Workflow'
@@ -153,7 +153,6 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
-		//this.logger.info(`getInputData() returns: ${JSON.stringify(items)}`)
 		const outputItems: INodeExecutionData[] = [];
 
 	  let correlationId = this.getNodeParameter('correlationId', 0) as string;
@@ -483,7 +482,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			// Send a single response to the hub AFTER collecting payload
 			// ------------------------------------------------------------------------------------
 			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] Sending response → req=${entry.requestId}, corr=${correlationId}, mode=${respondWith}`
+				`[RespondToPrivateWorkflow] Sending response → corr=${correlationId}, mode=${respondWith}`
 			);
 
 			await entry.client.sendResponseToHub(

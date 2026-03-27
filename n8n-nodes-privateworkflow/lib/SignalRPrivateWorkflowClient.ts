@@ -3,7 +3,6 @@
 // Updated to use the new zero-dependency SignalRClient engine.
 
 import { SignalRClient, HubConnection } from './SignalRClient';
-import { jsonStringify } from 'n8n-workflow';
 import { PrivateWorkflowAck } from './PrivateWorkflowAck';
 import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
 import { PrivateWorkflowRequest } from './PrivateWorkflowRequest';
@@ -214,7 +213,7 @@ export class SignalRPrivateWorkflowClient {
 	private async handleExecute(req: PrivateWorkflowRequest): Promise<void> {
 		if (!this.conn) return;
 
-		this.log("info", `req: ${JSON.stringify(req)}`);
+		this.log("info", `Received ExecutePrivateWorkflow (correlationId=${req.correlationId})`);
 
 		const correlationId = req.correlationId ?? '';
 		const requestId = req.requestId ?? '';
@@ -275,14 +274,14 @@ export class SignalRPrivateWorkflowClient {
 		// ---------------------------------------------------------------------
 		// Call user handler (contract preserved)
 		// ---------------------------------------------------------------------
-		const result = await this.cfg.onExecute({
+		await this.cfg.onExecute({
 			request: req,
 			inlineJson,
 			inlineText,
 			payload,
 		});
 
-		this.log('info', jsonStringify(result));
+		this.log('debug', 'onExecute handler completed');
 
 		// ---------------------------------------------------------------------
 		// Manual-run resolver (unchanged)

@@ -18,7 +18,6 @@ export class HubUrlService {
 
         try {
             const url = `${this.apiBaseUrl}/api/apikeys/hub?apiKey=${encodeURIComponent(apiKey)}`;
-            console.log("Hub Info Fetch URL:", url);
 
             const response = await fetch(url, {
                 method: "GET",
@@ -73,7 +72,6 @@ export class HubUrlService {
             return hubInfo;
         }
         catch (err) {
-            console.error("Error retrieving hub info:", err);
             return null;
         }
     }

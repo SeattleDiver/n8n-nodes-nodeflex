@@ -4,13 +4,11 @@ import {
 	INodeTypeDescription,
 	ITriggerResponse,
 	NodeOperationError,
-	jsonStringify,
 	INodeExecutionData
 } from 'n8n-workflow';
 
 import { SignalRPrivateWorkflowClient } from '../../lib/SignalRPrivateWorkflowClient'
 import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
-//import { HubUrlService } from "../../library/HubUrlService";
 import { HubProfileService } from "../../lib/HubProfileService";
 import { WorkflowHubService } from "../../lib/WorkflowHubService";
 import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
@@ -103,12 +101,9 @@ export class PrivateWorkflowTrigger implements INodeType {
 				if (!creds?.apiKey) {
      	 		throw new NodeOperationError(this.getNode(), 'API key is missing. Add it in the node credentials.');
     		}
-        var apiKey = creds?.apiKey;
-				self.logger.info("Using ApiKey: " + apiKey);
+        const apiKey = creds?.apiKey;
 
 				const hubService = new HubProfileService(hubBase, this);
-
-				// const hubService = new HubUrlService(hubBase);
 				const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
 
 				const hubUrl = hubInfo?.hubUrl;
@@ -122,14 +117,9 @@ export class PrivateWorkflowTrigger implements INodeType {
 				{
      	 		throw new NodeOperationError(this.getNode(), 'Blob URL is unavailable.  Hub service is down.');
 				}
-			  self.logger.info("hubBase: " + hubBase);
-				self.logger.info("hubPath: " + hubPath);
-
-				self.logger.info(`Resolved Hub url : ${hubUrl}`);
-				self.logger.info(`Resolved Blob url: ${blobUrl}`);
+			  self.logger.info(`Resolved hub for path: ${hubPath}`);
 
         // const accessToken = creds?.accessToken;
-        // const apiKey = 'AN9FMzZ4ZeHgNutVXJ9OdLYIyRha2ovIrTXJAEvjgD9nypxS'; // <-- for testing only
         const accessToken = '';
 
         let started = false;
@@ -158,7 +148,6 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 							this.logger.info(`[PrivateWorkflowTrigger] onExecute()`);
 							try {
-								// Prepare the item
 								const raw = inlineJson ?? inlineText ?? null;
 
 								const base =
@@ -168,14 +157,9 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 							  const requestId = request?.requestId ?? 'unknown';
 
-  							// Get the respond mode selected in node UI
-								var respondMode = this.getNodeParameter('respond', 0) as string;
+  							let respondMode = this.getNodeParameter('respond', 0) as string;
 								const isManual = (this.getMode && this.getMode() === 'manual');
-								this.logger.info("isManual " + isManual);
-								this.logger.info('respondMode: '+ respondMode);
-								this.logger.info('requestId: ' + requestId);
-								this.logger.info('inlineJson: ' + jsonStringify(inlineJson));
-								this.logger.info('inlineText: ' + inlineText);
+								this.logger.info(`respondMode: ${respondMode}, isManual: ${isManual}`);
 
 								// Override respond mode for manual triggers
 								if (isManual && respondMode !== 'immediately') {
@@ -431,16 +415,6 @@ export class PrivateWorkflowTrigger implements INodeType {
 						self.logger?.warn(`Error while stopping SignalR: ${(e as Error)?.message ?? e}`);
 					}
 				};
-
-				// const normalizeToArray = (value: any): IDataObject[] => {
-				// 	if (Array.isArray(value)) {
-				// 		return value.map(v => ('json' in v ? v.json : v));
-				// 	}
-				// 	if (typeof value === 'object' && value !== null) {
-				// 		return [value];
-				// 	}
-				// 	return [{ value }];
-				// };
 
 				//
         // Manual execution in the editor:

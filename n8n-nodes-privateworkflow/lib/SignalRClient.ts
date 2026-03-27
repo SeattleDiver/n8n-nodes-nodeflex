@@ -142,7 +142,7 @@ export class HubConnection {
 
         if (this.options.accessTokenFactory) {
             try { accessToken = await this.options.accessTokenFactory(); }
-            catch (e) { console.error("Error getting access token:", e); }
+            catch { /* token factory failed — continue without token */ }
         }
 
         // ---------------- Negotiate ----------------
@@ -306,12 +306,9 @@ export class HubConnection {
         this.onCloseCallbacks.forEach(cb => { try { cb(err); } catch {} });
     }
 
-    private log(level: LogLevel, msg: string, ...args: any[]) {
-        if (level >= this.logLevel) {
-            const prefix = `[${new Date().toISOString()}]`;
-            if (level >= LogLevel.Error) console.error(prefix, msg, ...args);
-            else console.log(prefix, msg, ...args);
-        }
+    private log(level: LogLevel, _msg: string, ..._args: any[]) {
+        if (level < this.logLevel) return;
+        // Logging is handled by the SignalRPrivateWorkflowClient wrapper.
     }
 }
 

@@ -19,11 +19,10 @@ export class PrivateWorkflowPublicKeyApi implements ICredentialType {
 			displayName: 'API Key',
 			name: 'apiKey',
 			type: 'string',
-	    // eslint-disable-next-line n8n-nodes-base/cred-class-field-type-options-password-missing
-			typeOptions: { password: false },
+			typeOptions: { password: true },
 			default: '',
 			required: true,
-			description: 'API key for authenticating with the n8nCloud Private Workflow API.',
+			description: 'API key for authenticating with the NodeFlex Private Workflow API.',
 		},
 		{
 			displayName: 'Public Key for Payload encryption/decription',
