@@ -59,11 +59,6 @@ export class PrivateWorkflow implements INodeType {
 						value: 'json',
 						description: 'Use the input JSON as the workflow payload',
 					},
-					// {
-					// 	name: 'Text',
-					// 	value: 'text',
-					// 	description: 'Specify text to send as the workflow payload',
-					// },
 					{
 						name: 'Binary File',
 						value: 'binary',
@@ -184,15 +179,6 @@ export class PrivateWorkflow implements INodeType {
 				description: 'Maximum time to wait for a workflow response',
 				hint: 'Wait time can be up to 15 seconds.'
 			},
-			// {
-			// 	displayName: 'Encrypt Workflow Payload in Transit',
-			// 	name: 'encryptPayload',
-			// 	type: 'boolean',
-			// 	default: false,
-			// 	description:
-			// 		'Encrypt the workflow payload in transit between n8n and the Private Workflow. Configure your public key in the credential.',
-			// 	hint: 'When enabled, all requests and responses for this execution are automatically encrypted and decrypted. No additional configuration is required on downstream Private Workflow nodes.',
-			// },
 		],
 	};
 

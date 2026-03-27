@@ -58,25 +58,12 @@ export class PrivateWorkflowTrigger implements INodeType {
 							description: 'Send an acknowledgement immediately after this node runs',
 						},
 						{
-							name: 'When Last Node Finishes',
-							value: 'whenLastNodeFinishes',
-							description: 'Returns data of the last-executed node',
-						},
-						{
 							name: 'Using \'Respond to Private Workflow\' Node',
 							value: 'respondToPrivateWorkflow',
 							description: 'Wait for a dedicated \'Respond to Private Workflow\' node to send a response',
 						},
 					],
 				},
-				{
-					displayName: 'Encrypt Workflow Payload in Transit',
-					name: 'encryptPayload',
-					type: 'boolean',
-					default: false,
-					description: 'Whether or not to encrypt the workflow payload in transit between n8n and the Private Workflow',
-					hint: 'When enabled, all requests and responses for this execution are automatically encrypted and decrypted',
-				}
 			],
 		};
 
@@ -337,21 +324,6 @@ export class PrivateWorkflowTrigger implements INodeType {
 											`[PrivateWorkflowTrigger] Registered correlationId=${correlationId} for deferred response (requestId=${requestId})`
 										);
 										return;
-									}
-
-									// ------------------------------------------------------------------------------------------------
-									// 3️⃣ When Last Node Finishes  (placeholder – implemented later)
-									// ------------------------------------------------------------------------------------------------
-									case 'whenLastNodeFinishes': {
-										// We'll fill this in next: wait until workflow execution finishes automatically
-										// For now, behave same as immediate
-										self.emit([self.helpers.returnJsonArray([base])]);
-										return {
-											ok: true,
-											mode: respondMode,
-											receivedAt: new Date().toISOString(),
-											message: 'Placeholder until implemented',
-										};
 									}
 
 									// ------------------------------------------------------------------------------------------------
