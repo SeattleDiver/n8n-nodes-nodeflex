@@ -8,6 +8,7 @@ import type {
 export class PrivateWorkflowPublicKeyApi implements ICredentialType {
 	name = 'privateWorkflowPublicKeyApi';
 	displayName = 'Private Workflow Credentials with Public Key API';
+	icon = 'fa:key' as const;
 	documentationUrl = 'https://github.com/SeattleDiver/nodeflex-workflow';
 	description = `Authentication credentials for the Private Workflow with Public Key.
 
@@ -28,7 +29,6 @@ export class PrivateWorkflowPublicKeyApi implements ICredentialType {
 			displayName: 'Public Key for Payload encryption/decription',
 			name: 'publicKey',
 			type: 'string',
-	    // eslint-disable-next-line n8n-nodes-base/cred-class-field-type-options-password-missing
 			typeOptions: { rows: 5, password: false },
 			default: '',
 			required: false,

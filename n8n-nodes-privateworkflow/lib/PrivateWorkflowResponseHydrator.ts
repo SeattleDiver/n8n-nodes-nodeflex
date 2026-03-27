@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { INodeExecutionData } from 'n8n-workflow';
 
 export interface HydrationOptions {

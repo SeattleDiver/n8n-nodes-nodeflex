@@ -1,3 +1,5 @@
+// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
+import { clearTimeout } from 'node:timers';
 import {
 	IExecuteFunctions,
 	INodeExecutionData,
@@ -15,6 +17,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 		displayName: 'Respond to Private Workflow',
 		name: 'respondToPrivateWorkflow',
 		group: ['output'],
+		usableAsTool: true,
 		version: 1,
 		description: 'Sends a response back to the Private Workflow Trigger',
 		icon: 'file:icon.svg',
@@ -172,7 +175,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 		try
 		{
-			let payload: any;
+			let payload: IDataObject | IDataObject[] | string | null | undefined;
 			switch (respondWith) {
 
 				case 'allItems': {
@@ -226,7 +229,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 					}
 
 					const clean = { ...(item.json as IDataObject) };
-					delete (clean as any).__correlationId;
+					delete (clean as Record<string, unknown>).__correlationId;
 
 					payload = clean;
 					outputItems.push({ json: clean });
@@ -365,7 +368,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 				if (json && typeof json === 'object' && !Array.isArray(json)) {
 					const clean = { ...(json as IDataObject) };
-					delete (clean as any).__correlationId;
+					delete (clean as Record<string, unknown>).__correlationId;
 					outputItems[i] = {
 						...item,
 						json: clean,
@@ -379,13 +382,13 @@ export class RespondToPrivateWorkflow implements INodeType {
 					const obj = payload[i];
 					if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
 						const clean = { ...(obj as IDataObject) };
-						delete (clean as any).__correlationId;
+						delete (clean as Record<string, unknown>).__correlationId;
 						payload[i] = clean;
 					}
 				}
 			} else if (payload && typeof payload === 'object') {
 				const clean = { ...(payload as IDataObject) };
-				delete (clean as any).__correlationId;
+				delete (clean as Record<string, unknown>).__correlationId;
 				payload = clean;
 			}
 

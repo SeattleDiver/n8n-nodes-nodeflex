@@ -1,3 +1,8 @@
+// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
+import { setTimeout, clearTimeout } from 'node:timers';
+// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
+import https from 'node:https';
+
 export interface PrivateWorkflowClientOptions {
 	apiKey?: string;          // optional bearer token
 	verifySSL?: boolean;      // false for self-signed localhost certs
@@ -18,7 +23,7 @@ export class PrivateWorkflowHttpClient {
 	 * Posts the given body to the target URL.
 	 * The body should match the C# PrivateWorkflowRequest model.
 	 */
-	async post(targetUrl: string, body: any): Promise<any> {
+	async post(targetUrl: string, body: Record<string, unknown>): Promise<unknown> {
 		const controller = new AbortController();
 		const timeout = setTimeout(
 			() => controller.abort(),
@@ -33,7 +38,7 @@ export class PrivateWorkflowHttpClient {
 				headers['x-api-key'] = this.options.apiKey;
 			}
 
-			const fetchOpts: RequestInit & { agent?: any } = {
+			const fetchOpts: RequestInit & { agent?: https.Agent } = {
 				method: 'POST',
 				headers,
 				body: JSON.stringify(body),
@@ -41,7 +46,6 @@ export class PrivateWorkflowHttpClient {
 			};
 
 			if (this.options.verifySSL === false) {
-				const https = await import('https');
 				fetchOpts.agent = new https.Agent({ rejectUnauthorized: false });
 			}
 
@@ -58,8 +62,8 @@ export class PrivateWorkflowHttpClient {
 				return await resp.json();
 			}
 			return await resp.text();
-		} catch (err: any) {
-			if (err.name === 'AbortError') {
+		} catch (err) {
+			if (err instanceof Error && err.name === 'AbortError') {
 				throw new Error('Request timeout');
 			}
 			throw err;

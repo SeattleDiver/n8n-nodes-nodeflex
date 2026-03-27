@@ -9,6 +9,8 @@
 // Promise resolvers/rejecters for deferred responses.
 // -----------------------------------------------------------------------------
 
+// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
+import { clearTimeout } from 'node:timers';
 import type { SignalRPrivateWorkflowClient } from './SignalRPrivateWorkflowClient';
 
 // -----------------------------------------------------------------------------
@@ -28,10 +30,10 @@ export interface RegistryEntry {
 	path: string;
 
 	/** Optional resolver for deferred workflows (active mode only) */
-	resolve?: (data: any) => void;
+	resolve?: (data: unknown) => void;
 
 	/** Optional rejecter for deferred workflows */
-	reject?: (err: any) => void;
+	reject?: (err: unknown) => void;
 
 	/** Timeout handle (cleared when the workflow responds or times out) */
 	timeout?: NodeJS.Timeout;

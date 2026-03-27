@@ -15,6 +15,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		displayName: 'Get Private Workflow Result',
 		name: 'getPrivateWorkflowResult',
 		group: ['input'],
+		usableAsTool: true,
 		version: 1,
 		description: 'Retrieves the current status or result of a Private Workflow execution',
 		icon: 'file:icon.svg',
@@ -84,9 +85,9 @@ export class GetPrivateWorkflowResult implements INodeType {
 		const targetUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/results/${correlationId}`;
 		this.logger.info(`[GetPrivateWorkflowResult] targetUrl = ${targetUrl}`);
 
-		// ------------------------------------------------------------
-		// Query the hub
-		// ------------------------------------------------------------
+		// Auth uses x-api-key header; httpRequestWithAuthentication not applicable
+		// because the credential doesn't define a generic authenticate property.
+		// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
 		const response = await this.helpers.httpRequest({
 			method: 'GET',
 			url: targetUrl,
@@ -123,14 +124,13 @@ export class GetPrivateWorkflowResult implements INodeType {
 				`[GetPrivateWorkflowResult] Downloading reference payload from ${referenceUrl}`
 			);
 
-			// IMPORTANT: encoding: null returns a Buffer
+			// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
 			const response = await this.helpers.httpRequest({
 				method: 'GET',
 				url: referenceUrl,
 				headers: {
 					'x-api-key': apiKey,
 				},
-	//			encoding: JSON.stringify(payload.encoding),
 			});
 
 			const buffer = Buffer.isBuffer(response)

@@ -1,3 +1,5 @@
+// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
+import { setTimeout } from 'node:timers';
 import {
 	ITriggerFunctions,
 	INodeType,
@@ -21,6 +23,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 			displayName: 'Private Workflow Trigger',
 			name: 'privateWorkflowTrigger',
 			group: ['trigger'],
+			usableAsTool: true,
 			version: 1,
 			description: 'When a remote private workflow is executed',
 			icon: 'file:icon.svg',
@@ -72,6 +75,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 		// ------------------------------------------------------------------------------------------------------------------------------------------------
     async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
 
+			  // eslint-disable-next-line @typescript-eslint/no-this-alias
 			  const self = this;
 				const hubBase = "https://hub.nodeflex.io";
 				const workflowName = this.getNodeParameter('workflowName', 0) as string;
@@ -131,7 +135,8 @@ export class PrivateWorkflowTrigger implements INodeType {
 						//   The payload may be encrypted. If we have a privateKey defined, then we must decrypt
 						//   the payload before we use it
 						// -------------------------------------------------------------------------------------------------------------------------------------------
-						onExecute: async ({ request, inlineJson, inlineText, payload }) => {
+						// eslint-disable-next-line @typescript-eslint/no-unused-vars
+						onExecute: async ({ request, inlineJson, inlineText, payload: _payload }) => {
 
 							this.logger.info(`[PrivateWorkflowTrigger] onExecute()`);
 							try {
@@ -139,7 +144,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 								const base =
 										raw && typeof raw === 'object' && 'json' in raw
-												? (raw as any).json
+												? (raw as Record<string, unknown>).json
 												: raw ?? { text: inlineText ?? null };
 
 							  const requestId = request?.requestId ?? 'unknown';
@@ -216,7 +221,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 									};
 								}
 
-								let outItem: INodeExecutionData = {
+								const outItem: INodeExecutionData = {
 									json: {
 										__correlationId: correlationId
 									},
@@ -343,7 +348,8 @@ export class PrivateWorkflowTrigger implements INodeType {
 							}
 						},
 
-						onConnectionError: async (err: unknown, ctx?: Record<string, unknown>) => {
+						// eslint-disable-next-line @typescript-eslint/no-unused-vars
+						onConnectionError: async (err: unknown, _ctx?: Record<string, unknown>) => {
 							try {
 								await client?.stop();
 								self.logger?.warn?.(`SignalR connection stopped due to error: ${String(err)}`);
@@ -392,6 +398,7 @@ export class PrivateWorkflowTrigger implements INodeType {
         // Manual execution in the editor:
 				//
 				const manualTriggerFunction = async function (this: ITriggerFunctions) {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
 					const self = this as any;
 
 					// Ensure SignalR client is connected
@@ -407,7 +414,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 						self.onCancel?.(() => {
 							cancelled = true;
 							self.logger.warn('[ManualMode] Cancel pressed — stopping client.');
-							try { client.stop(); } catch {}
+							try { client.stop(); } catch { /* stop error suppressed */ }
 						});
 
 						try {
@@ -422,6 +429,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 							self.logger.info('[ManualMode] Message received — closing connection.');
 
 							// Resolve any queued one-shot resolver (if used)
+							// eslint-disable-next-line @typescript-eslint/no-explicit-any
 							const resolver = (client as any).onceResolvers?.shift?.();
 							if (resolver) resolver();
 
@@ -430,7 +438,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 							self.logger.info('[ManualMode] SignalR connection closed. ✅');
 						} catch (err) {
 							self.logger.warn(`[ManualMode] Timeout or error: ${err}`);
-							try { await client.stop(); } catch {}
+							try { await client.stop(); } catch { /* stop error suppressed */ }
 						}
 
 						return;

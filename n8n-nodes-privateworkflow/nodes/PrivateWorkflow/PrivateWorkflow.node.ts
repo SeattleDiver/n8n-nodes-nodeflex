@@ -23,6 +23,7 @@ export class PrivateWorkflow implements INodeType {
 		displayName: 'Execute Private Workflow',
 		name: 'privateWorkflow',
 		group: ['transform'],
+		usableAsTool: true,
 		version: 1,
 		description: 'Run a remote private workflow',
 		defaults: {
@@ -183,7 +184,6 @@ export class PrivateWorkflow implements INodeType {
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		const self = this;
 		const items = this.getInputData();
 		const ackData: INodeExecutionData[] = [];
 		const completedData: INodeExecutionData[] = [];
@@ -242,7 +242,7 @@ export class PrivateWorkflow implements INodeType {
 					);
 				}
 
-				self.logger.info(`Resolved hub URLs for ${hubPath}`);
+				this.logger.info(`Resolved hub URLs for ${hubPath}`);
 
 				// Construct target URL (keep existing behavior)
 				const normalizedUrl = apiUrl.replace(/\/+$/, '');
@@ -435,7 +435,7 @@ export class PrivateWorkflow implements INodeType {
 
 				this.logger.info(`Calling private workflow at ${targetUrl}`);
 
-				const response = await client.post(targetUrl, request);
+				const response = await client.post(targetUrl, request as unknown as Record<string, unknown>);
 
 				// --------------------------------------------------------------------
 				// Output the responses (keep existing behavior)

@@ -2,6 +2,8 @@
 // SignalRPrivateWorkflowClient.ts
 // Updated to use the new zero-dependency SignalRClient engine.
 
+// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
+import { setTimeout } from 'node:timers';
 import { SignalRClient, HubConnection } from './SignalRClient';
 import { PrivateWorkflowAck } from './PrivateWorkflowAck';
 import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';

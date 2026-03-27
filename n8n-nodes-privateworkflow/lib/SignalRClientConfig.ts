@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// SignalRClientConfig uses `any` for dynamic SignalR protocol callbacks
 import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
 import { PrivateWorkflowRequest } from './PrivateWorkflowRequest';
 import { WorkflowHubService } from './WorkflowHubService';

@@ -5,6 +5,9 @@
 // 2. A simplified, GENERIC TinySignalRClient class
 // 3. Robust connection resilience (Auto-reconnect, Negotiation, Keep-Alive)
 
+// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
+import { setTimeout, clearTimeout, setInterval, clearInterval } from 'node:timers';
+
 // -------------------------------------------------------------------------
 // 2. Microsoft SignalR Enums
 // -------------------------------------------------------------------------
@@ -267,7 +270,11 @@ export class HubConnection {
                     const pending = this.pendingInvocations.get(data.invocationId);
                     if (pending) {
                         this.pendingInvocations.delete(data.invocationId);
-                        data.error ? pending.reject(new Error(data.error)) : pending.resolve(data.result);
+                        if (data.error) {
+                        pending.reject(new Error(data.error));
+                    } else {
+                        pending.resolve(data.result);
+                    }
                     }
                 }
             } catch (err) {
@@ -294,19 +301,20 @@ export class HubConnection {
     }
 
     private fireReconnectingCallbacks(err?: Error) {
-        this.onReconnectingCallbacks.forEach(cb => { try { cb(err); } catch {} });
+        this.onReconnectingCallbacks.forEach(cb => { try { cb(err); } catch { /* callback error suppressed */ } });
     }
 
     private fireReconnectedCallbacks() {
         const id = this.connectionId || undefined;
-        this.onReconnectedCallbacks.forEach(cb => { try { cb(id); } catch {} });
+        this.onReconnectedCallbacks.forEach(cb => { try { cb(id); } catch { /* callback error suppressed */ } });
     }
 
     private fireCloseCallbacks(err?: Error) {
-        this.onCloseCallbacks.forEach(cb => { try { cb(err); } catch {} });
+        this.onCloseCallbacks.forEach(cb => { try { cb(err); } catch { /* callback error suppressed */ } });
     }
 
-    private log(level: LogLevel, _msg: string, ..._args: any[]) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    private log(level: LogLevel, _msg: string, ..._args: unknown[]) {
         if (level < this.logLevel) return;
         // Logging is handled by the SignalRPrivateWorkflowClient wrapper.
     }

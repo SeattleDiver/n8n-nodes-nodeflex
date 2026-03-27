@@ -1,2 +1,10 @@
 .DS_Store
 *.tsbuildinfo
+*.tgz
+.vscode/
+.github/
+gulpfile.js
+nodes/
+credentials/
+lib/
+tsconfig.json

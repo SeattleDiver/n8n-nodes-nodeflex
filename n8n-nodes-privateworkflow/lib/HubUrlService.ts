@@ -30,10 +30,10 @@ export class HubUrlService {
                 throw new Error(`Hub endpoint returned HTTP ${response.status} ${response.statusText}`);
             }
 
-            let json: any;
+            let json: Record<string, unknown>;
 
             try {
-                json = await response.json();
+                json = await response.json() as Record<string, unknown>;
             }
             catch {
                 throw new Error("Hub endpoint returned non-JSON response.");
@@ -46,32 +46,25 @@ export class HubUrlService {
 
             // blobStorageUrl is optional in case future versions add/remove it
 						const hubInfo: WorkflowHubService = {
-							accountPath: json.accountPath,
-							// Endpoints
-							apiUrl: json.apiUrl,
-							hubUrl: json.hubUrl,
-							blobStorageUrl: json.blobStorageUrl ?? "",
-
-							// Tier / Limits
-							tier: json.tier ?? "Free",
-							maxPayload: json.maxPayload ?? 0,
-							maxConcurrentWorkflows: json.maxConcurrentWorkflows ?? 1,
-							ackTimeoutSeconds: json.ackTimeoutSeconds ?? 5,
-							maxRetries: json.maxRetries ?? 0,
-							retryInterval: json.retryInterval ?? 0,
-
-							// Storage
-							useStorage: json.useStorage ?? false,
-							maxStorageSize: json.maxStorageSize ?? 0,
-							storageTtl: json.storageTtl ?? 0,
-
-							// Metadata
-							metadata: json.metadata
+							accountPath: json.accountPath as string,
+							apiUrl: json.apiUrl as string,
+							hubUrl: json.hubUrl as string,
+							blobStorageUrl: (json.blobStorageUrl as string) ?? "",
+							tier: (json.tier as string) ?? "Free",
+							maxPayload: (json.maxPayload as number) ?? 0,
+							maxConcurrentWorkflows: (json.maxConcurrentWorkflows as number) ?? 1,
+							ackTimeoutSeconds: (json.ackTimeoutSeconds as number) ?? 5,
+							maxRetries: (json.maxRetries as number) ?? 0,
+							retryInterval: (json.retryInterval as number) ?? 0,
+							useStorage: (json.useStorage as boolean) ?? false,
+							maxStorageSize: (json.maxStorageSize as number) ?? 0,
+							storageTtl: (json.storageTtl as number) ?? 0,
+							metadata: json.metadata as string | undefined
 						};
 
             return hubInfo;
         }
-        catch (err) {
+        catch {
             return null;
         }
     }
