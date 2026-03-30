@@ -17,7 +17,6 @@ export class RespondToPrivateWorkflow implements INodeType {
 		displayName: 'Respond to Private Workflow',
 		name: 'respondToPrivateWorkflow',
 		group: ['output'],
-		usableAsTool: true,
 		version: 1,
 		description: 'Sends a response back to the Private Workflow Trigger',
 		icon: 'file:icon.svg',

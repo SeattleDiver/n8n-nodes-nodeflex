@@ -51,7 +51,6 @@ export class WorkflowPayloadBlobTransport {
 
 		// IMPORTANT: field name must match C# property name: "File"
 		form.append('File', blob, fileName);
-
 		const response = await fetch(this.uploadUrl, {
 			method: 'POST',
 			headers: {
