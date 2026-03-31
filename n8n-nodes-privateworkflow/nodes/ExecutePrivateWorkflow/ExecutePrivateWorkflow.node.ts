@@ -16,12 +16,12 @@ import { PrivateWorkflowResponseHydrator } from '../../lib/PrivateWorkflowRespon
 import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
 
-export class PrivateWorkflow implements INodeType {
+export class ExecutePrivateWorkflow implements INodeType {
 	private static readonly HUB_BASE = 'https://hub.nodeflex.io';
 
 	description: INodeTypeDescription = {
 		displayName: 'Execute Private Workflow',
-		name: 'privateWorkflow',
+		name: 'executePrivateWorkflow',
 		group: ['transform'],
 		version: 1,
 		description: 'Run a remote private workflow',
@@ -196,7 +196,7 @@ export class PrivateWorkflow implements INodeType {
 				// ------------------------------------------------------------
 				// Get the hubBase, extract the hubProfile and setup all the URL's and profile parameters
 				// ------------------------------------------------------------
-				const hubBase = PrivateWorkflow.HUB_BASE;
+				const hubBase = ExecutePrivateWorkflow.HUB_BASE;
 				const hubService = new HubUrlService(hubBase);
 				const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
 
@@ -401,7 +401,7 @@ export class PrivateWorkflow implements INodeType {
 					};
 
 					this.logger.info(
-						`[PrivateWorkflow (execute)] Payload uploaded (${payloadLength} bytes) → ${upload.url}`,
+						`[ExecutePrivateWorkflow] Payload uploaded (${payloadLength} bytes) → ${upload.url}`,
 					);
 
 				} else {

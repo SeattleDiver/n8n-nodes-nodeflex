@@ -33,7 +33,7 @@
     ],
     "nodes": [
       "dist/nodes/PrivateWorkflowTrigger/PrivateWorkflowTrigger.node.js",
-      "dist/nodes/PrivateWorkflow/PrivateWorkflow.node.js",
+      "dist/nodes/ExecutePrivateWorkflow/ExecutePrivateWorkflow.node.js",
       "dist/nodes/RespondToPrivateWorkflow/RespondToPrivateWorkflow.node.js",
       "dist/nodes/GetPrivateWorkflowResult/GetPrivateWorkflowResult.node.js"
     ]

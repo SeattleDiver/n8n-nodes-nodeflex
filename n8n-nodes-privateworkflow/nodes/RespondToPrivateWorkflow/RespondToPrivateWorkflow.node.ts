@@ -500,7 +500,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			PrivateWorkflowResponseRegistry.delete(correlationId);
 
 			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] ✅ Response sent & cleared (corr=${correlationId})`
+				`[RespondToPrivateWorkflow] Response sent & cleared (corr=${correlationId})`
 			);
 
 			// Return items to workflow
