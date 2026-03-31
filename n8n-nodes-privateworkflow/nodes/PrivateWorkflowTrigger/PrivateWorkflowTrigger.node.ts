@@ -6,7 +6,8 @@ import {
 	INodeTypeDescription,
 	ITriggerResponse,
 	NodeOperationError,
-	INodeExecutionData
+	INodeExecutionData,
+	jsonStringify
 } from 'n8n-workflow';
 
 import { SignalRPrivateWorkflowClient } from '../../lib/SignalRPrivateWorkflowClient'
@@ -109,6 +110,7 @@ export class PrivateWorkflowTrigger implements INodeType {
      	 		throw new NodeOperationError(this.getNode(), 'Blob URL is unavailable.  Hub service is down.');
 				}
 			  self.logger.info(`Resolved hub for path: ${hubPath}`);
+				self.logger.info(`${jsonStringify(hubInfo)}`);
 
         // const accessToken = creds?.accessToken;
         const accessToken = '';

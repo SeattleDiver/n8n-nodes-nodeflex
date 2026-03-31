@@ -229,6 +229,7 @@ export class PrivateWorkflow implements INodeType {
 						},
 					);
 				}
+				this.logger.info("BlobURL: " + blobUrl);
 
 				const apiUrl = hubInfo?.apiUrl;
 				if (!apiUrl) {
