@@ -12,7 +12,7 @@ export class PrivateWorkflowApi implements ICredentialType {
 	displayName = 'Private Workflow Credentials';
 	icon = 'fa:key' as const;
 	documentationUrl = 'https://github.com/SeattleDiver/nodeflex-workflow';
-	description = `Authentication credentials for executing a NodeFlex Private Workflow .
+	description = `Authentication credentials for executing a NodeFlex Private Workflow.
 
 	**Documentation:** [View Setup Guide](https://github.com/SeattleDiver/nodeflex-workflow)`;
 
