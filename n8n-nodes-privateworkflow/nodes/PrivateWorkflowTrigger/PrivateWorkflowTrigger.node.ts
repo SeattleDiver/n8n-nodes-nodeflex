@@ -125,7 +125,6 @@ export class PrivateWorkflowTrigger implements INodeType {
             apiKey,
             accessToken,
 						hubService: hubInfo,
-						http,
             logLevel: 'info',
 						isSingleNodeRun: false,
 			      logger: {

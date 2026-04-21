@@ -7,7 +7,6 @@
 
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
 import { setTimeout, clearTimeout, setInterval, clearInterval } from 'node:timers';
-import { IN8nHttpHelper } from './N8nHttpHelper';
 
 // -------------------------------------------------------------------------
 // 2. Microsoft SignalR Enums
@@ -47,19 +46,17 @@ export class HubConnection {
     private options: IHttpConnectionOptions;
     private reconnectDelays: number[] = [0, 2000, 5000, 10000, 30000];
     private logLevel: LogLevel = LogLevel.Information;
-    private http: IN8nHttpHelper;
 
     // Callbacks
     private onReconnectingCallbacks: Array<(error?: Error) => void> = [];
     private onReconnectedCallbacks: Array<(connectionId?: string) => void> = [];
     private onCloseCallbacks: Array<(error?: Error) => void> = [];
 
-    constructor(url: string, apiKey: string, group: string, options: IHttpConnectionOptions, http: IN8nHttpHelper) {
+    constructor(url: string, apiKey: string, group: string, options: IHttpConnectionOptions) {
         this.baseUrl = url;
         this.apiKey = apiKey;
         this.group = group;
         this.options = options;
-        this.http = http;
     }
 
     // ---------------------------------------------------------------------
@@ -159,12 +156,10 @@ export class HubConnection {
             const headers: any = {};
             if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
-            const negotiation = await this.http.httpRequest({
-                method: 'POST',
-                url: negotiateUrl,
-                headers,
-                json: true,
-            }) as {
+            const response = await fetch(negotiateUrl, { method: "POST", headers });
+            if (!response.ok) throw new Error(`Negotiate failed: ${response.status}`);
+
+            const negotiation = await response.json() as {
 								url?: string;
 								accessToken?: string;
 								connectionId?: string;
@@ -335,7 +330,6 @@ export class HubConnectionBuilder {
     private options: IHttpConnectionOptions = {};
     private reconnectDelays = [0, 2000, 2000, 2000, 5000, 5000, 5000, 10000];
     private logLevel = LogLevel.Information;
-    private http!: IN8nHttpHelper;
 
     public withUrl(url: string, options?: IHttpConnectionOptions): this {
         this.url = url;
@@ -353,11 +347,6 @@ export class HubConnectionBuilder {
         return this;
     }
 
-    public withHttpHelper(http: IN8nHttpHelper): this {
-        this.http = http;
-        return this;
-    }
-
     public withAutomaticReconnect(delays?: number[]): this {
         if (delays) this.reconnectDelays = delays;
         return this;
@@ -370,9 +359,8 @@ export class HubConnectionBuilder {
 
     public build(): HubConnection {
         if (!this.url) throw new Error("HubConnectionBuilder.withUrl(url) is required.");
-        if (!this.http) throw new Error("HubConnectionBuilder.withHttpHelper(http) is required.");
 
-        const conn = new HubConnection(this.url, this.apiKey, this.group, this.options, this.http);
+        const conn = new HubConnection(this.url, this.apiKey, this.group, this.options);
         conn._setReconnectDelays(this.reconnectDelays);
         conn._setLogLevel(this.logLevel);
         return conn;
@@ -385,7 +373,7 @@ export class HubConnectionBuilder {
 export class SignalRClient {
     private _connection: HubConnection;
 
-    constructor(hubUrl: string, apiKey: string, hubPath: string, http: IN8nHttpHelper) {
+    constructor(hubUrl: string, apiKey: string, hubPath: string) {
         const wsParams: Record<string, string> = {};
         if (hubPath) wsParams["group"] = hubPath;
 
@@ -393,7 +381,6 @@ export class SignalRClient {
             .withUrl(hubUrl, { webSocketQueryParams: wsParams })
             .withApiKey(apiKey)
             .withGroup(hubPath)
-            .withHttpHelper(http)
             .withAutomaticReconnect()
             .configureLogging(LogLevel.Information)
             .build();
