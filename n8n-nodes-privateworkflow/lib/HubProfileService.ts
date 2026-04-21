@@ -20,6 +20,7 @@ export class HubProfileService {
 						apiKey
 					},
 					json: true,
+					skipSslCertificateValidation: true	// Disable for live builds
 			};
 
 			// Using n8n's helper instead of fetch

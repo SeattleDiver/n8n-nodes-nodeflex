@@ -34,7 +34,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 		outputNames: ['Acknowledged', 'Completed'],
 		credentials: [
 			{
-				name: 'privateWorkflowPublicKeyApi', // must match your credentials class name
+				name: 'privateWorkflowApi',
 				required: true,
 			},
 		],
@@ -188,7 +188,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 		const completedData: INodeExecutionData[] = [];
 
 		// Get credentials (keep existing behavior)
-		const creds = await this.getCredentials('privateWorkflowPublicKeyApi');
+		const creds = await this.getCredentials('privateWorkflowApi');
 		const apiKey = creds.apiKey as string;
 
 		for (let i = 0; i < items.length; i++) {

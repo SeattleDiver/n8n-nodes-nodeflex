@@ -28,8 +28,7 @@
     "n8nNodesApiVersion": 1,
     "strict": true,
     "credentials": [
-      "dist/credentials/privateWorkflowPublicKeyApi.credentials.js",
-      "dist/credentials/PrivateWorkflowPrivateKeyApi.credentials.js"
+      "dist/credentials/PrivateWorkflowApi.credentials.js"
     ],
     "nodes": [
       "dist/nodes/PrivateWorkflowTrigger/PrivateWorkflowTrigger.node.js",

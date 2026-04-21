@@ -178,7 +178,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			switch (respondWith) {
 
 				case 'allItems': {
-					// 1️⃣ Reject binary explicitly
+					// Reject binary explicitly
 					for (const item of items) {
 						if (item.binary && Object.keys(item.binary).length > 0) {
 							throw new NodeOperationError(
@@ -188,7 +188,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 						}
 					}
 
-					// 2️⃣ Collect JSON items
+					// Collect JSON items
 					const jsonItems: IDataObject[] = [];
 
 					for (const item of items) {
@@ -198,7 +198,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 						}
 					}
 
-					// 3️⃣ Hub payload = array of JSON objects
+					// Hub payload = array of JSON objects
 					payload = jsonItems;
 					break;
 				}

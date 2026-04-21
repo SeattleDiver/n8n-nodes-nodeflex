@@ -28,7 +28,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		outputNames: ['Completed', 'Pending'],
 		credentials: [
 			{
-				name: 'privateWorkflowPublicKeyApi',
+				name: 'privateWorkflowApi',
 				required: true,
 			},
 		],
@@ -51,7 +51,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// ------------------------------------------------------------
 		// Credentials
 		// ------------------------------------------------------------
-		const creds = (await this.getCredentials('privateWorkflowPublicKeyApi')) as {
+		const creds = (await this.getCredentials('privateWorkflowApi')) as {
 			apiKey?: string;
 		};
 

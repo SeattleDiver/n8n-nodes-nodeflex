@@ -35,7 +35,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 			outputs: ['main'],
 			credentials: [
 				{
-					name: 'privateWorkflowPrivateKeyApi',
+					name: 'privateWorkflowApi',
 					required: true,
 				},
 			],
@@ -85,7 +85,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 					throw new NodeOperationError(this.getNode(), "Workflow name is required.");
 				}
 
-				const creds = (await this.getCredentials('privateWorkflowPrivateKeyApi')) as {
+				const creds = (await this.getCredentials('privateWorkflowApi')) as {
       		apiKey?: string;
       		accessToken?: string;
     		} | null;
