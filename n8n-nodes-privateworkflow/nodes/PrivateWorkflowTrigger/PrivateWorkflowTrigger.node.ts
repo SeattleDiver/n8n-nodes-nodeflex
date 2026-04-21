@@ -12,6 +12,7 @@ import {
 import { SignalRPrivateWorkflowClient } from '../../lib/SignalRPrivateWorkflowClient'
 import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
 import { HubProfileService } from "../../lib/HubProfileService";
+import { HUB_BASE_URL } from "../../lib/HubConfig";
 import { WorkflowHubService } from "../../lib/WorkflowHubService";
 import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 
@@ -77,7 +78,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 			  // eslint-disable-next-line @typescript-eslint/no-this-alias
 			  const self = this;
-				const hubBase = "https://hub.nodeflex.io";
+				const hubBase = HUB_BASE_URL;
 				const workflowName = this.getNodeParameter('workflowName', 0) as string;
 				if (!workflowName)
 				{

@@ -15,9 +15,9 @@ import { PrivateWorkflowRequest } from '../../lib/PrivateWorkflowRequest';
 import { PrivateWorkflowResponseHydrator } from '../../lib/PrivateWorkflowResponseHydrator';
 import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
+import { HUB_BASE_URL } from '../../lib/HubConfig';
 
 export class ExecutePrivateWorkflow implements INodeType {
-	private static readonly HUB_BASE = 'https://hub.nodeflex.io';
 
 	description: INodeTypeDescription = {
 		displayName: 'Execute Private Workflow',
@@ -196,7 +196,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 				// ------------------------------------------------------------
 				// Get the hubBase, extract the hubProfile and setup all the URL's and profile parameters
 				// ------------------------------------------------------------
-				const hubBase = ExecutePrivateWorkflow.HUB_BASE;
+				const hubBase = HUB_BASE_URL;
 				const hubService = new HubUrlService(hubBase);
 				const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
 

@@ -7,6 +7,7 @@ import {
 } from 'n8n-workflow';
 
 import { HubUrlService } from '../../lib/HubUrlService';
+import { HUB_BASE_URL } from '../../lib/HubConfig';
 import { WorkflowHubService } from '../../lib/WorkflowHubService';
 import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 
@@ -72,7 +73,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// ------------------------------------------------------------
 		// Resolve execution hub via control plane
 		// ------------------------------------------------------------
-		const hubBase = 'https://hub.nodeflex.io';
+		const hubBase = HUB_BASE_URL;
 		const hubService: HubUrlService = new HubUrlService(hubBase);
 		const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
 

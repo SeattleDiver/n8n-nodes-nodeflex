@@ -5,6 +5,8 @@ import type {
 	IHttpRequestMethods,
 } from 'n8n-workflow';
 
+import { HUB_VERIFY_URL } from '../lib/HubConfig';
+
 export class PrivateWorkflowPrivateKeyApi implements ICredentialType {
 	name = 'privateWorkflowPrivateKeyApi';
 	displayName = 'Private Workflow Credentials with Private Key API';
@@ -40,7 +42,7 @@ export class PrivateWorkflowPrivateKeyApi implements ICredentialType {
 	test: ICredentialTestRequest = {
 		request: {
 			method: 'GET' as IHttpRequestMethods,
-			url: '=https://hub.nodeflex.io/api/apikeys/verify',
+			url: `=${HUB_VERIFY_URL}`,
 			qs: {
 				apiKey: '={{$credentials.apiKey}}',
 			},
