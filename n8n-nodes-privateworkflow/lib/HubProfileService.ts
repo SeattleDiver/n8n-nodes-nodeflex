@@ -1,15 +1,11 @@
-import {
-	ITriggerFunctions,
-	IExecuteFunctions,
-	IHttpRequestOptions
-} from 'n8n-workflow';
+import { IHttpRequestOptions } from 'n8n-workflow';
 import { WorkflowHubService } from "./WorkflowHubService";
+import { IN8nHttpHelper } from "./N8nHttpHelper";
 
 export class HubProfileService {
 	constructor(
 			private readonly apiBaseUrl: string,
-			// Pass n8n functions to use the built-in request helper
-			private readonly n8nContext: IExecuteFunctions | ITriggerFunctions,
+			private readonly http: IN8nHttpHelper,
 	) {}
 
 	public async getHubInfo(apiKey: string): Promise<WorkflowHubService> {
@@ -20,11 +16,12 @@ export class HubProfileService {
 						apiKey
 					},
 					json: true,
-					skipSslCertificateValidation: true	// Disable for live builds
+					// Development only: set to true when debugging against a local hub (e.g. localhost).
+					// Must remain false in production.
+					skipSslCertificateValidation: false,
 			};
 
-			// Using n8n's helper instead of fetch
-			const json = await this.n8nContext.helpers.httpRequest(options);
+			const json = await this.http.httpRequest(options);
 
 			// Validate shape
 			if (!json || typeof json.hubUrl !== 'string') {

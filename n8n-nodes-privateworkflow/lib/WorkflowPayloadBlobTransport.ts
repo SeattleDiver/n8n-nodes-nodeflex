@@ -1,5 +1,9 @@
 // WorkflowPayloadBlobTransport.ts
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { IHttpRequestOptions } from 'n8n-workflow';
+import { IN8nHttpHelper } from './N8nHttpHelper';
+
 export interface WorkflowPayloadBlobTransportConfig {
 	/**
 	 * Blob upload endpoint provided by the hub.
@@ -17,6 +21,11 @@ export interface WorkflowPayloadBlobTransportConfig {
 	 * Optional static headers (correlation IDs, tracing, etc.)
 	 */
 	headers?: Record<string, string>;
+
+	/**
+	 * n8n HTTP helper for making requests
+	 */
+	http: IN8nHttpHelper;
 }
 
 export interface BlobUploadResult {
@@ -45,28 +54,21 @@ export class WorkflowPayloadBlobTransport {
 		const contentType = options.contentType ?? 'application/octet-stream';
 
 		const form = new FormData();
-
-		// Node 18+ supports Blob
 		const blob = new Blob([buffer], { type: contentType });
-
-		// IMPORTANT: field name must match C# property name: "File"
 		form.append('File', blob, fileName);
-		const response = await fetch(this.uploadUrl, {
+
+		// helpers.httpRequest uses axios which supports FormData natively
+		const requestOptions: IHttpRequestOptions = {
 			method: 'POST',
+			url: this.uploadUrl,
 			headers: {
 				'x-api-key': this.cfg.apiKey,
 				...this.cfg.headers,
-				// DO NOT set Content-Type for multipart; fetch will add boundary
 			},
-			body: form,
-		});
+			body: form as any,
+		};
 
-		if (!response.ok) {
-			const text = await response.text().catch(() => '');
-			throw new Error(`Blob upload failed (${response.status}): ${text}`);
-		}
-
-		const body = (await response.json()) as BlobUploadResult;
+		const body = await this.cfg.http.httpRequest(requestOptions) as BlobUploadResult;
 
 		if (!body?.url) {
 			throw new Error('Blob upload response missing url');
@@ -79,19 +81,17 @@ export class WorkflowPayloadBlobTransport {
 	// Download blob reference → raw bytes
 	// ------------------------------------------------------------
 	async download(url: string): Promise<Buffer> {
-		const response = await fetch(url, {
+		const requestOptions: IHttpRequestOptions = {
 			method: 'GET',
+			url,
 			headers: {
 				'x-api-key': this.cfg.apiKey,
 				...this.cfg.headers,
 			},
-		});
+			encoding: 'arraybuffer',
+		};
 
-		if (!response.ok) {
-			throw new Error(`Blob download failed (${response.status})`);
-		}
-
-		const arrayBuffer = await response.arrayBuffer();
-		return Buffer.from(arrayBuffer);
+		const response = await this.cfg.http.httpRequest(requestOptions);
+		return Buffer.isBuffer(response) ? response : Buffer.from(response);
 	}
 }

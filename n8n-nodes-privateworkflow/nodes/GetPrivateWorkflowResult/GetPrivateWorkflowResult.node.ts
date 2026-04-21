@@ -6,8 +6,9 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
-import { HubUrlService } from '../../lib/HubUrlService';
+import { HubProfileService } from '../../lib/HubProfileService';
 import { HUB_BASE_URL } from '../../lib/HubConfig';
+import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
 import { WorkflowHubService } from '../../lib/WorkflowHubService';
 import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 
@@ -74,10 +75,19 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// Resolve execution hub via control plane
 		// ------------------------------------------------------------
 		const hubBase = HUB_BASE_URL;
-		const hubService: HubUrlService = new HubUrlService(hubBase);
-		const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
+		const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
+		const hubService = new HubProfileService(hubBase, http);
+		let hubInfo: WorkflowHubService;
+		try {
+			hubInfo = await hubService.getHubInfo(apiKey);
+		} catch {
+			throw new NodeOperationError(
+				this.getNode(),
+				'Hub service is unavailable.',
+			);
+		}
 
-		if (!hubInfo?.hubUrl || !hubInfo?.apiUrl || !hubInfo?.blobStorageUrl) {
+		if (!hubInfo.hubUrl || !hubInfo.apiUrl || !hubInfo.blobStorageUrl) {
 			throw new NodeOperationError(
 				this.getNode(),
 				'Hub service information is incomplete or unavailable.',

@@ -11,6 +11,7 @@ import {
 import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
 import { PrivateWorkflowPayload, PrivateWorkflowPayloadEncoding } from '../../lib/PrivateWorkflowPayload';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
+import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
 
 export class RespondToPrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
@@ -435,9 +436,11 @@ export class RespondToPrivateWorkflow implements INodeType {
 				{
 					throw new NodeOperationError(this.getNode(), 'API key is not available on Private Workflow Trigger');
 				}
+				const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
 				const blobTransport = new WorkflowPayloadBlobTransport({
 					baseUrl: hubService.blobStorageUrl,
 					apiKey,
+					http,
 				});
 
 				// Perform the upload (multipart/form-data, field name = "File")

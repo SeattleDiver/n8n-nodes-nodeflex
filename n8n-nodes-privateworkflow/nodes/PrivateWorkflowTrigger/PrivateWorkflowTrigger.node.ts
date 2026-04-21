@@ -13,6 +13,7 @@ import { SignalRPrivateWorkflowClient } from '../../lib/SignalRPrivateWorkflowCl
 import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
 import { HubProfileService } from "../../lib/HubProfileService";
 import { HUB_BASE_URL } from "../../lib/HubConfig";
+import { IN8nHttpHelper } from "../../lib/N8nHttpHelper";
 import { WorkflowHubService } from "../../lib/WorkflowHubService";
 import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 
@@ -78,6 +79,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 			  // eslint-disable-next-line @typescript-eslint/no-this-alias
 			  const self = this;
+				const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
 				const hubBase = HUB_BASE_URL;
 				const workflowName = this.getNodeParameter('workflowName', 0) as string;
 				if (!workflowName)
@@ -95,7 +97,7 @@ export class PrivateWorkflowTrigger implements INodeType {
     		}
         const apiKey = creds?.apiKey;
 
-				const hubService = new HubProfileService(hubBase, this);
+				const hubService = new HubProfileService(hubBase, http);
 				const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
 
 				const hubUrl = hubInfo?.hubUrl;
@@ -123,6 +125,7 @@ export class PrivateWorkflowTrigger implements INodeType {
             apiKey,
             accessToken,
 						hubService: hubInfo,
+						http,
             logLevel: 'info',
 						isSingleNodeRun: false,
 			      logger: {
@@ -186,18 +189,17 @@ export class PrivateWorkflowTrigger implements INodeType {
 										throw new NodeOperationError(this.getNode(), 'Reference payload missing value/url');
 									}
 
-									const response = await fetch(referenceUrl, {
+									// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
+									const refResponse = await self.helpers.httpRequest({
+										method: 'GET',
+										url: referenceUrl,
 										headers: {
-											'x-api-key': apiKey, // IMPORTANT if your blob endpoint requires it
+											'x-api-key': apiKey,
 										},
+										encoding: 'arraybuffer',
 									});
 
-									if (!response.ok)
-									{
-										throw new NodeOperationError(this.getNode(), `Failed to download reference payload (${response.status})`)
-									}
-
-									const buffer = Buffer.from(await response.arrayBuffer());
+									const buffer = Buffer.isBuffer(refResponse) ? refResponse : Buffer.from(refResponse);
 									let decodedValue: string;
 
 									switch(wfPayload.encoding)

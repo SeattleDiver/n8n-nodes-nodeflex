@@ -9,13 +9,14 @@ import {
 import { randomUUID } from 'crypto';
 
 import { PrivateWorkflowHttpClient } from '../../lib/PrivateWorkflowHttpClient';
-import { HubUrlService } from '../../lib/HubUrlService';
+import { HubProfileService } from '../../lib/HubProfileService';
 import { WorkflowHubService } from '../../lib/WorkflowHubService';
 import { PrivateWorkflowRequest } from '../../lib/PrivateWorkflowRequest';
 import { PrivateWorkflowResponseHydrator } from '../../lib/PrivateWorkflowResponseHydrator';
 import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
 import { HUB_BASE_URL } from '../../lib/HubConfig';
+import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
 
 export class ExecutePrivateWorkflow implements INodeType {
 
@@ -190,6 +191,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 		// Get credentials (keep existing behavior)
 		const creds = await this.getCredentials('privateWorkflowApi');
 		const apiKey = creds.apiKey as string;
+		const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
 
 		for (let i = 0; i < items.length; i++) {
 			try {
@@ -197,10 +199,19 @@ export class ExecutePrivateWorkflow implements INodeType {
 				// Get the hubBase, extract the hubProfile and setup all the URL's and profile parameters
 				// ------------------------------------------------------------
 				const hubBase = HUB_BASE_URL;
-				const hubService = new HubUrlService(hubBase);
-				const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
+				const hubService = new HubProfileService(hubBase, http);
+				let hubInfo: WorkflowHubService;
+				try {
+					hubInfo = await hubService.getHubInfo(apiKey);
+				} catch {
+					throw new NodeOperationError(
+						this.getNode(),
+						'Hub service is unavailable.',
+						{ itemIndex: i },
+					);
+				}
 
-				const hubUrl = hubInfo?.hubUrl;
+				const hubUrl = hubInfo.hubUrl;
 				if (!hubUrl) {
 					throw new NodeOperationError(
 						this.getNode(),
@@ -219,7 +230,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 				}
 
 				const hubPath = hubInfo.accountPath + '/' + workflowName;
-				const blobUrl = hubInfo?.blobStorageUrl;
+				const blobUrl = hubInfo.blobStorageUrl;
 				if (!blobUrl) {
 					throw new NodeOperationError(
 						this.getNode(),
@@ -231,7 +242,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 				}
 				this.logger.info("BlobURL: " + blobUrl);
 
-				const apiUrl = hubInfo?.apiUrl;
+				const apiUrl = hubInfo.apiUrl;
 				if (!apiUrl) {
 					throw new NodeOperationError(
 						this.getNode(),
@@ -383,6 +394,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 					const blobTransport = new WorkflowPayloadBlobTransport({
 						baseUrl: blobUrl,
 						apiKey,
+						http,
 					});
 
 					const buffer =
@@ -430,8 +442,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 				// Send request (keep existing behavior)
 				const client = new PrivateWorkflowHttpClient({
 					apiKey,
-					verifySSL: !targetUrl.includes('localhost'),
-				});
+				}, http);
 
 				this.logger.info(`Calling private workflow at ${targetUrl}`);
 

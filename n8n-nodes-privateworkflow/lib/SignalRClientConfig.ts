@@ -3,6 +3,7 @@
 import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
 import { PrivateWorkflowRequest } from './PrivateWorkflowRequest';
 import { WorkflowHubService } from './WorkflowHubService';
+import { IN8nHttpHelper } from './N8nHttpHelper';
 
 // ------------------- Interfaces (unchanged) -------------------
 export interface SignalRClientConfig {
@@ -11,6 +12,7 @@ export interface SignalRClientConfig {
     apiKey?: string;
     accessToken?: string;
 		hubService: WorkflowHubService;
+		http: IN8nHttpHelper;
     logLevel?: 'none' | 'info' | 'debug';
     isSingleNodeRun?: boolean;
 

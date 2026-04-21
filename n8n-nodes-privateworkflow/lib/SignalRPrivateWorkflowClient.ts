@@ -91,7 +91,8 @@ export class SignalRPrivateWorkflowClient {
 		this.client = new SignalRClient(
 			this.cfg.hubUrl,
 			this.cfg.apiKey ?? '',
-			this.cfg.hubPath
+			this.cfg.hubPath,
+			this.cfg.http,
 		);
 
 		this.conn = this.client.raw;
