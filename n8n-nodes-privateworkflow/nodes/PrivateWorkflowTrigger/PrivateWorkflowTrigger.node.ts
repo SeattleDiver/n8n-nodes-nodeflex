@@ -126,7 +126,7 @@ export class PrivateWorkflowTrigger implements INodeType {
             accessToken,
 						hubService: hubInfo,
             logLevel: 'info',
-						isSingleNodeRun: false,
+						isSingleNodeRun: !!(this.getMode && this.getMode() === 'manual'),
 			      logger: {
 								info: (m, ...a) => self.logger.info(m, ...a),
 								warn: (m, ...a) => self.logger.warn(m, ...a),

@@ -44,8 +44,14 @@ export class HubConnection {
 
     private isStopped = true;
     private options: IHttpConnectionOptions;
-    private reconnectDelays: number[] = [0, 2000, 5000, 10000, 30000];
     private logLevel: LogLevel = LogLevel.Information;
+
+    // Two-phase retry budget configuration
+    private retryMaxDurationMs = 28_800_000;    // 8 hours
+    private retryInitialDelayMs = 2_000;
+    private retryPhase1CapMs = 60_000;
+    private retryPhase1DurationMs = 3_600_000;  // 1 hour
+    private retryPhase2IntervalMs = 900_000;    // 15 minutes
 
     // Callbacks
     private onReconnectingCallbacks: Array<(error?: Error) => void> = [];
@@ -132,7 +138,20 @@ export class HubConnection {
     // Lifecycle
     public onreconnecting(cb: (error?: Error) => void) { this.onReconnectingCallbacks.push(cb); }
     public onreconnected(cb: (id?: string) => void) { this.onReconnectedCallbacks.push(cb); }
-    public _setReconnectDelays(delays: number[]) { this.reconnectDelays = delays; }
+    public _setReconnectDelays(_delays: number[]) { /* legacy no-op, use _setRetryBudget */ }
+    public _setRetryBudget(cfg: {
+        maxDurationMs?: number;
+        initialDelayMs?: number;
+        phase1CapMs?: number;
+        phase1DurationMs?: number;
+        phase2IntervalMs?: number;
+    }) {
+        if (cfg.maxDurationMs !== undefined) this.retryMaxDurationMs = cfg.maxDurationMs;
+        if (cfg.initialDelayMs !== undefined) this.retryInitialDelayMs = cfg.initialDelayMs;
+        if (cfg.phase1CapMs !== undefined) this.retryPhase1CapMs = cfg.phase1CapMs;
+        if (cfg.phase1DurationMs !== undefined) this.retryPhase1DurationMs = cfg.phase1DurationMs;
+        if (cfg.phase2IntervalMs !== undefined) this.retryPhase2IntervalMs = cfg.phase2IntervalMs;
+    }
     public _setLogLevel(level: LogLevel) { this.logLevel = level; }
 
     // ---------------------------------------------------------------------
@@ -233,15 +252,34 @@ export class HubConnection {
     private async handleAutomaticReconnect() {
         this.fireReconnectingCallbacks(new Error("Reconnecting"));
 
-        for (const delay of this.reconnectDelays) {
+        const startTime = Date.now();
+        let delay = 0; // first attempt is immediate
+
+        while (!this.isStopped) {
+            if (delay > 0) {
+                await new Promise(r => setTimeout(r, delay));
+            }
+
             if (this.isStopped) return;
-            await new Promise(r => setTimeout(r, delay));
+
+            const elapsed = Date.now() - startTime;
+            if (elapsed >= this.retryMaxDurationMs) break;
 
             try {
                 await this.connectInternal(true);
-                return;
+                return; // success
             } catch {
-                this.log(LogLevel.Warning, "Reconnect failed");
+                // Compute next delay based on which phase we're in
+                const elapsedAfterAttempt = Date.now() - startTime;
+                if (elapsedAfterAttempt < this.retryPhase1DurationMs) {
+                    // Phase 1: exponential backoff capped at phase1CapMs
+                    delay = delay === 0
+                        ? this.retryInitialDelayMs
+                        : Math.min(delay * 2, this.retryPhase1CapMs);
+                } else {
+                    // Phase 2: fixed interval
+                    delay = this.retryPhase2IntervalMs;
+                }
             }
         }
 
@@ -328,7 +366,13 @@ export class HubConnectionBuilder {
     private apiKey = '';
     private group = '';
     private options: IHttpConnectionOptions = {};
-    private reconnectDelays = [0, 2000, 2000, 2000, 5000, 5000, 5000, 10000];
+    private retryBudget: {
+        maxDurationMs?: number;
+        initialDelayMs?: number;
+        phase1CapMs?: number;
+        phase1DurationMs?: number;
+        phase2IntervalMs?: number;
+    } = {};
     private logLevel = LogLevel.Information;
 
     public withUrl(url: string, options?: IHttpConnectionOptions): this {
@@ -347,8 +391,14 @@ export class HubConnectionBuilder {
         return this;
     }
 
-    public withAutomaticReconnect(delays?: number[]): this {
-        if (delays) this.reconnectDelays = delays;
+    public withAutomaticReconnect(budget?: {
+        maxDurationMs?: number;
+        initialDelayMs?: number;
+        phase1CapMs?: number;
+        phase1DurationMs?: number;
+        phase2IntervalMs?: number;
+    }): this {
+        if (budget) this.retryBudget = budget;
         return this;
     }
 
@@ -361,7 +411,7 @@ export class HubConnectionBuilder {
         if (!this.url) throw new Error("HubConnectionBuilder.withUrl(url) is required.");
 
         const conn = new HubConnection(this.url, this.apiKey, this.group, this.options);
-        conn._setReconnectDelays(this.reconnectDelays);
+        conn._setRetryBudget(this.retryBudget);
         conn._setLogLevel(this.logLevel);
         return conn;
     }

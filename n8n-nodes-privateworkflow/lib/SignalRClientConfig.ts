@@ -28,4 +28,11 @@ export interface SignalRClientConfig {
     }) => Promise<any> | any;
 
     onConnectionError?: (error: unknown, context?: Record<string, unknown>) => void;
+
+    // Retry / backoff configuration (defaults applied in SignalRPrivateWorkflowClient)
+    retryMaxDurationMs?: number;       // Total retry budget (default: 8 hours = 28_800_000)
+    retryInitialDelayMs?: number;      // First retry delay (default: 2_000)
+    retryPhase1CapMs?: number;         // Max delay during phase 1 (default: 60_000)
+    retryPhase1DurationMs?: number;    // Phase 1 window before switching to phase 2 (default: 1 hour = 3_600_000)
+    retryPhase2IntervalMs?: number;    // Fixed interval in phase 2 (default: 15 min = 900_000)
 }
