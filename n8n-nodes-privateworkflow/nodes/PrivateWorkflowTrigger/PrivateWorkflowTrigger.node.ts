@@ -96,22 +96,7 @@ export class PrivateWorkflowTrigger implements INodeType {
      	 		throw new NodeOperationError(this.getNode(), 'API key is missing. Add it in the node credentials.');
     		}
         const apiKey = creds?.apiKey;
-
-				const hubService = new HubProfileService(hubBase, http);
-				const hubInfo: WorkflowHubService | null = await hubService.getHubInfo(apiKey);
-
-				const hubUrl = hubInfo?.hubUrl;
-				if (!hubUrl)
-				{
-     	 		throw new NodeOperationError(this.getNode(), 'Hub URL is unavailable.  Hub service is down.');
-				}
-				const hubPath = hubInfo.accountPath + "/" + workflowName;
-				const blobUrl = hubInfo?.blobStorageUrl;
-				if (!blobUrl)
-				{
-     	 		throw new NodeOperationError(this.getNode(), 'Blob URL is unavailable.  Hub service is down.');
-				}
-			  self.logger.info(`Resolved hub for path: ${hubPath}`);
+				const isManualRun = !!(this.getMode && this.getMode() === 'manual');
 
         // const accessToken = creds?.accessToken;
         const accessToken = '';
@@ -119,261 +104,352 @@ export class PrivateWorkflowTrigger implements INodeType {
         let started = false;
         let startingPromise: Promise<void> | null = null;
 
-        const client = new SignalRPrivateWorkflowClient({
-            hubUrl,
-            hubPath,
-            apiKey,
-            accessToken,
-						hubService: hubInfo,
-            logLevel: 'info',
-						isSingleNodeRun: !!(this.getMode && this.getMode() === 'manual'),
-			      logger: {
-								info: (m, ...a) => self.logger.info(m, ...a),
-								warn: (m, ...a) => self.logger.warn(m, ...a),
-								error: (m, ...a) => self.logger.error(m, ...a),
-						},
+				// Mutable client reference — reassigned on each retry attempt
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				let client: SignalRPrivateWorkflowClient = null as any;
+				let hubPath = '';
+				let hubInfo: WorkflowHubService | null = null;
 
-						// -------------------------------------------------------------------------------------------------------------------------------------------
-						// onExecute is called when the SignalR connection receives a message from the hub
-						//   The payload may be encrypted. If we have a privateKey defined, then we must decrypt
-						//   the payload before we use it
-						// -------------------------------------------------------------------------------------------------------------------------------------------
-						// eslint-disable-next-line @typescript-eslint/no-unused-vars
-						onExecute: async ({ request, inlineJson, inlineText, payload: _payload }) => {
+				// -----------------------------------------------------------------------
+				// Two-phase retry budget (applies to entire activation: hub fetch + connect)
+				// -----------------------------------------------------------------------
+				const RETRY_MAX_DURATION_MS = 28_800_000;   // 8 hours
+				const RETRY_INITIAL_DELAY_MS = 2_000;
+				const RETRY_PHASE1_CAP_MS = 60_000;         // 60s cap during phase 1
+				const RETRY_PHASE1_DURATION_MS = 3_600_000;  // 1 hour
+				const RETRY_PHASE2_INTERVAL_MS = 900_000;    // 15 minutes
 
-							this.logger.info(`[PrivateWorkflowTrigger] onExecute()`);
-							try {
-								const raw = inlineJson ?? inlineText ?? null;
+				// -----------------------------------------------------------------------
+				// connectToHub: fetches hub info, creates client, and starts connection.
+				// Throws on any failure so the retry loop can catch and retry.
+				// -----------------------------------------------------------------------
+				const connectToHub = async () => {
 
-								const base =
-										raw && typeof raw === 'object' && 'json' in raw
-												? (raw as Record<string, unknown>).json
-												: raw ?? { text: inlineText ?? null };
+					const hubService = new HubProfileService(hubBase, http);
+					hubInfo = await hubService.getHubInfo(apiKey);
 
-							  const requestId = request?.requestId ?? 'unknown';
+					const hubUrl = hubInfo?.hubUrl;
+					if (!hubUrl)
+					{
+						throw new NodeOperationError(self.getNode(), 'Hub URL is unavailable.  Hub service is down.');
+					}
+					hubPath = hubInfo.accountPath + "/" + workflowName;
+					const blobUrl = hubInfo?.blobStorageUrl;
+					if (!blobUrl)
+					{
+						throw new NodeOperationError(self.getNode(), 'Blob URL is unavailable.  Hub service is down.');
+					}
+					self.logger.info(`Resolved hub for path: ${hubPath}`);
 
-  							let respondMode = this.getNodeParameter('respond', 0) as string;
-								const isManual = (this.getMode && this.getMode() === 'manual');
-								this.logger.info(`respondMode: ${respondMode}, isManual: ${isManual}`);
+					client = new SignalRPrivateWorkflowClient({
+							hubUrl,
+							hubPath,
+							apiKey,
+							accessToken,
+							hubService: hubInfo,
+							logLevel: 'info',
+							isSingleNodeRun: isManualRun,
+							retryMaxDurationMs: RETRY_MAX_DURATION_MS,
+							retryInitialDelayMs: RETRY_INITIAL_DELAY_MS,
+							retryPhase1CapMs: RETRY_PHASE1_CAP_MS,
+							retryPhase1DurationMs: RETRY_PHASE1_DURATION_MS,
+							retryPhase2IntervalMs: RETRY_PHASE2_INTERVAL_MS,
+							logger: {
+										info: (m, ...a) => self.logger.info(m, ...a),
+										warn: (m, ...a) => self.logger.warn(m, ...a),
+										error: (m, ...a) => self.logger.error(m, ...a),
+							},
 
-								// Override respond mode for manual triggers
-								if (isManual && respondMode !== 'immediately') {
-									this.logger.info("[ManualMode] Overriding respondMode to 'immediately' for test run.");
-									respondMode = 'immediately';
-								}
+							// -------------------------------------------------------------------------------------------------------------------------------------------
+							// onExecute is called when the SignalR connection receives a message from the hub
+							//   The payload may be encrypted. If we have a privateKey defined, then we must decrypt
+							//   the payload before we use it
+							// -------------------------------------------------------------------------------------------------------------------------------------------
+							// eslint-disable-next-line @typescript-eslint/no-unused-vars
+							onExecute: async ({ request, inlineJson, inlineText, payload: _payload }) => {
 
- 								// const correlationId = crypto.randomUUID();
-								const correlationId = request?.correlationId;
-								if (!correlationId || correlationId == "")
-								{
-									throw new NodeOperationError(this.getNode(), 'CorrelationId is required!');
-								}
+								this.logger.info(`[PrivateWorkflowTrigger] onExecute()`);
+								try {
+									const raw = inlineJson ?? inlineText ?? null;
 
-								// Decode the workflow request payload
-								const wfPayload = request.payload as PrivateWorkflowPayload;
+									const base =
+											raw && typeof raw === 'object' && 'json' in raw
+													? (raw as Record<string, unknown>).json
+													: raw ?? { text: inlineText ?? null };
 
-								// ------------------------------------------------------------
-								// Normalize reference payload → inline payload
-								// ------------------------------------------------------------
-								let normalizedPayload = wfPayload;
+									const requestId = request?.requestId ?? 'unknown';
 
-								this.logger.info(`[PrivateWorkflowTrigger] payloadType = ${wfPayload.type}`);
+									let respondMode = this.getNodeParameter('respond', 0) as string;
+									const isManual = (this.getMode && this.getMode() === 'manual');
+									this.logger.info(`respondMode: ${respondMode}, isManual: ${isManual}`);
 
-								if (wfPayload.type === 'reference') {
-									const referenceUrl = wfPayload.value;
-
-									this.logger.info(`[PrivateWorkflowTrigger] reference URL ${referenceUrl}`)
-
-									if (!referenceUrl) {
-										throw new NodeOperationError(this.getNode(), 'Reference payload missing value/url');
+									// Override respond mode for manual triggers
+									if (isManual && respondMode !== 'immediately') {
+										this.logger.info("[ManualMode] Overriding respondMode to 'immediately' for test run.");
+										respondMode = 'immediately';
 									}
 
-									// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
-									const refResponse = await self.helpers.httpRequest({
-										method: 'GET',
-										url: referenceUrl,
-										headers: {
-											'x-api-key': apiKey,
-										},
-										encoding: 'arraybuffer',
-									});
-
-									const buffer = Buffer.isBuffer(refResponse) ? refResponse : Buffer.from(refResponse);
-									let decodedValue: string;
-
-									switch(wfPayload.encoding)
+									// const correlationId = crypto.randomUUID();
+									const correlationId = request?.correlationId;
+									if (!correlationId || correlationId == "")
 									{
-										case 'base64':
-											decodedValue = buffer.toString('base64');
-											break;
-
-										case 'json':
-										case 'text':
-											decodedValue = buffer.toString('utf8');
-											break;
-
-										default:
-											throw new NodeOperationError(this.getNode(), `Unsupported payload encoding: ${wfPayload.encoding}`);
+										throw new NodeOperationError(this.getNode(), 'CorrelationId is required!');
 									}
 
-									normalizedPayload = {
-										...wfPayload,
-										type: 'inline',
-										value: decodedValue
-									};
-								}
+									// Decode the workflow request payload
+									const wfPayload = request.payload as PrivateWorkflowPayload;
 
-								const outItem: INodeExecutionData = {
-									json: {
-										__correlationId: correlationId
-									},
-								};
-								if (normalizedPayload.type === 'inline' && normalizedPayload.encoding === 'base64') {
-									outItem.binary = {
-										file: {
-											data: normalizedPayload.value, // base64 (no re-encoding!)
-											fileName: 'data',
-											mimeType: 'application/octet-stream',
+									// ------------------------------------------------------------
+									// Normalize reference payload → inline payload
+									// ------------------------------------------------------------
+									let normalizedPayload = wfPayload;
+
+									this.logger.info(`[PrivateWorkflowTrigger] payloadType = ${wfPayload.type}`);
+
+									if (wfPayload.type === 'reference') {
+										const referenceUrl = wfPayload.value;
+
+										this.logger.info(`[PrivateWorkflowTrigger] reference URL ${referenceUrl}`)
+
+										if (!referenceUrl) {
+											throw new NodeOperationError(this.getNode(), 'Reference payload missing value/url');
+										}
+
+										// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
+										const refResponse = await self.helpers.httpRequest({
+											method: 'GET',
+											url: referenceUrl,
+											headers: {
+												'x-api-key': apiKey,
+											},
+											encoding: 'arraybuffer',
+										});
+
+										const buffer = Buffer.isBuffer(refResponse) ? refResponse : Buffer.from(refResponse);
+										let decodedValue: string;
+
+										switch(wfPayload.encoding)
+										{
+											case 'base64':
+												decodedValue = buffer.toString('base64');
+												break;
+
+											case 'json':
+											case 'text':
+												decodedValue = buffer.toString('utf8');
+												break;
+
+											default:
+												throw new NodeOperationError(this.getNode(), `Unsupported payload encoding: ${wfPayload.encoding}`);
+										}
+
+										normalizedPayload = {
+											...wfPayload,
+											type: 'inline',
+											value: decodedValue
+										};
+									}
+
+									const outItem: INodeExecutionData = {
+										json: {
+											__correlationId: correlationId
 										},
 									};
-								}
-								if (normalizedPayload.type === 'inline' && normalizedPayload.encoding !== 'base64') {
-									const jsonValue = JSON.parse(normalizedPayload.value);
-
-									// Block arrays.  User must wrap them.
-									if (Array.isArray(jsonValue)) {
-										throw new NodeOperationError(
-											this.getNode(),
-											'Private Workflow Trigger does not accept array payloads.  Arrays must be wrapped in the Execute Private Workflow node. '
-										);
-									}
-									if (typeof jsonValue !== 'object' || jsonValue === null || Array.isArray(jsonValue)) {
-										throw new NodeOperationError(
-											this.getNode(),
-											'Private workflow payload must be a single JSON object'
-										);
-									}
-
-									// Emit exactly what was sent to the hub
-									Object.assign(outItem.json, jsonValue);
-								}
-
-								// ------------------------------------------------------------
-								// Start the workflow by emitting the outItem
-								// ------------------------------------------------------------
-								this.emit([[outItem]]);
-
-								switch (respondMode) {
-
-									// ------------------------------------------------------------------------------------------------
-									// 1️⃣ Respond Immediately
-									// ------------------------------------------------------------------------------------------------
-									case 'immediately': {
-
-										self.logger?.info?.('[Trigger] Sending immediate response to hub...');
-
-										const ackPayload: PrivateWorkflowPayload = {
-											type: 'inline',
-											value: JSON.stringify({
-												ok: true,
-												mode: respondMode,
-												receivedAt: new Date().toISOString(),
-											}),
-											encoding: 'json',
-											isEncrypted: false,
-											length: JSON.stringify({
-												ok: true,
-												mode: respondMode,
-												receivedAt: new Date().toISOString(),
-											}).length,
+									if (normalizedPayload.type === 'inline' && normalizedPayload.encoding === 'base64') {
+										outItem.binary = {
+											file: {
+												data: normalizedPayload.value, // base64 (no re-encoding!)
+												fileName: 'data',
+												mimeType: 'application/octet-stream',
+											},
 										};
+									}
+									if (normalizedPayload.type === 'inline' && normalizedPayload.encoding !== 'base64') {
+										const jsonValue = JSON.parse(normalizedPayload.value);
 
-										void client.sendResponseToHub(
-											correlationId,
-											'Running',
-											requestId,
-											ackPayload,
-											hubPath,
-										).catch(err =>
-											self.logger?.warn?.(`[Trigger] sendResponseToHub error: ${err}`)
-										);
+										// Block arrays.  User must wrap them.
+										if (Array.isArray(jsonValue)) {
+											throw new NodeOperationError(
+												this.getNode(),
+												'Private Workflow Trigger does not accept array payloads.  Arrays must be wrapped in the Execute Private Workflow node. '
+											);
+										}
+										if (typeof jsonValue !== 'object' || jsonValue === null || Array.isArray(jsonValue)) {
+											throw new NodeOperationError(
+												this.getNode(),
+												'Private workflow payload must be a single JSON object'
+											);
+										}
 
-										// ✅ Do NOT return an object — this tells n8n we are done
-										return;
+										// Emit exactly what was sent to the hub
+										Object.assign(outItem.json, jsonValue);
 									}
 
-									// ------------------------------------------------------------------------------------
-									// 2️⃣ RESPOND TO PRIVATE WORKFLOW
-									// ------------------------------------------------------------------------------------
-									case 'respondToPrivateWorkflow': {
+									// ------------------------------------------------------------
+									// Start the workflow by emitting the outItem
+									// ------------------------------------------------------------
+									this.emit([[outItem]]);
 
-										// Create one output item
-										// this.emit([[outItem]]);
+									switch (respondMode) {
 
-										const entry = {
-											correlationId,
-											client,     // the live SignalRPrivateWorkflowClient
-											requestId,  // original hub RequestId
-											path: hubPath,
-											isManual: this.getMode && this.getMode() === 'manual',
-											timeout: setTimeout(() => {
-												PrivateWorkflowResponseRegistry.delete(correlationId);
-												self.logger?.warn?.(
-													`[PrivateWorkflowTrigger] Timeout waiting for response correlationId=${correlationId}`
-												);
-											}, 120_000),
-										};
+										// ------------------------------------------------------------------------------------------------
+										// 1️⃣ Respond Immediately
+										// ------------------------------------------------------------------------------------------------
+										case 'immediately': {
 
-										// Register the pending response in the global registry
-										PrivateWorkflowResponseRegistry.register(correlationId, entry);
+											self.logger?.info?.('[Trigger] Sending immediate response to hub...');
 
-										self.logger?.info?.(
-											`[PrivateWorkflowTrigger] Registered correlationId=${correlationId} for deferred response (requestId=${requestId})`
-										);
-										return;
+											const ackPayload: PrivateWorkflowPayload = {
+												type: 'inline',
+												value: JSON.stringify({
+													ok: true,
+													mode: respondMode,
+													receivedAt: new Date().toISOString(),
+												}),
+												encoding: 'json',
+												isEncrypted: false,
+												length: JSON.stringify({
+													ok: true,
+													mode: respondMode,
+													receivedAt: new Date().toISOString(),
+												}).length,
+											};
+
+											void client.sendResponseToHub(
+												correlationId,
+												'Running',
+												requestId,
+												ackPayload,
+												hubPath,
+											).catch(err =>
+												self.logger?.warn?.(`[Trigger] sendResponseToHub error: ${err}`)
+											);
+
+											// ✅ Do NOT return an object — this tells n8n we are done
+											return;
+										}
+
+										// ------------------------------------------------------------------------------------
+										// 2️⃣ RESPOND TO PRIVATE WORKFLOW
+										// ------------------------------------------------------------------------------------
+										case 'respondToPrivateWorkflow': {
+
+											// Create one output item
+											// this.emit([[outItem]]);
+
+											const entry = {
+												correlationId,
+												client,     // the live SignalRPrivateWorkflowClient
+												requestId,  // original hub RequestId
+												path: hubPath,
+												isManual: this.getMode && this.getMode() === 'manual',
+												timeout: setTimeout(() => {
+													PrivateWorkflowResponseRegistry.delete(correlationId);
+													self.logger?.warn?.(
+														`[PrivateWorkflowTrigger] Timeout waiting for response correlationId=${correlationId}`
+													);
+												}, 120_000),
+											};
+
+											// Register the pending response in the global registry
+											PrivateWorkflowResponseRegistry.register(correlationId, entry);
+
+											self.logger?.info?.(
+												`[PrivateWorkflowTrigger] Registered correlationId=${correlationId} for deferred response (requestId=${requestId})`
+											);
+											return;
+										}
+
+										// ------------------------------------------------------------------------------------------------
+										// Default fallback
+										// ------------------------------------------------------------------------------------------------
+										default: {
+											self.logger?.warn?.(`Unknown respond mode: ${respondMode}`);
+											self.emit([self.helpers.returnJsonArray([base])]);
+											return { ok: true, receivedAt: new Date().toISOString() };
+										}
 									}
 
-									// ------------------------------------------------------------------------------------------------
-									// Default fallback
-									// ------------------------------------------------------------------------------------------------
-									default: {
-										self.logger?.warn?.(`Unknown respond mode: ${respondMode}`);
-										self.emit([self.helpers.returnJsonArray([base])]);
-										return { ok: true, receivedAt: new Date().toISOString() };
-									}
+								} catch (err) {
+
+									self.logger?.error?.(`Error in onExecute: ${(err as Error)?.message ?? err}`);
+									return { ok: false, error: String(err) };
+								}
+							},
+
+							// eslint-disable-next-line @typescript-eslint/no-unused-vars
+							onConnectionError: async (err: unknown, _ctx?: Record<string, unknown>) => {
+								try {
+									await client?.stop();
+									self.logger?.warn?.(`SignalR connection stopped due to error: ${String(err)}`);
+								} catch (stopErr) {
+									self.logger?.warn?.(`Error stopping SignalR: ${(stopErr as Error)?.message ?? stopErr}`);
 								}
 
-							} catch (err) {
-
-								self.logger?.error?.(`Error in onExecute: ${(err as Error)?.message ?? err}`);
-								return { ok: false, error: String(err) };
+								// Properly propagate the error to n8n so the trigger terminates
+								const error = err instanceof Error ? err : new Error(String(err));
+								throw new NodeOperationError(self.getNode(), error);
 							}
-						},
+					});
 
-						// eslint-disable-next-line @typescript-eslint/no-unused-vars
-						onConnectionError: async (err: unknown, _ctx?: Record<string, unknown>) => {
-							try {
-								await client?.stop();
-								self.logger?.warn?.(`SignalR connection stopped due to error: ${String(err)}`);
-							} catch (stopErr) {
-								self.logger?.warn?.(`Error stopping SignalR: ${(stopErr as Error)?.message ?? stopErr}`);
-							}
+					await client.start();
+					started = true;
+				};
 
-							// Properly propagate the error to n8n so the trigger terminates
-							const error = err instanceof Error ? err : new Error(String(err));
-							throw new NodeOperationError(self.getNode(), error);
-						}
-        });
-
-        // Idempotent start helper
+        // -----------------------------------------------------------------------
+				// ensureStarted: idempotent activation with two-phase retry
+				// -----------------------------------------------------------------------
         const ensureStarted = async () => {
             if (started) return;
             if (!startingPromise) {
                 startingPromise = (async () => {
-                    await client.start(); // resolves only after the hub connection is established + registered
-                    started = true;
-                    startingPromise = null;
-                    self.logger.info('SignalR connection established (ensureStarted)');
+
+									// Manual runs: fail immediately, no retry
+									if (isManualRun) {
+										await connectToHub();
+										self.logger.info('SignalR connection established (ensureStarted, manual)');
+										return;
+									}
+
+									// Production: two-phase retry loop
+									const retryStart = Date.now();
+									let delay = 0;
+									// eslint-disable-next-line @typescript-eslint/no-explicit-any
+									let lastError: any;
+
+									while (true) {
+										if (delay > 0) {
+											await new Promise<void>(r => setTimeout(r, delay));
+										}
+
+										const elapsed = Date.now() - retryStart;
+										if (elapsed >= RETRY_MAX_DURATION_MS) {
+											const err = lastError ?? new Error('Max retry duration exceeded');
+											self.logger.error(`Activation failed after ${Math.round(elapsed / 60_000)} minutes: ${err?.message ?? err}`);
+											throw err;
+										}
+
+										try {
+											await connectToHub();
+											self.logger.info('SignalR connection established (ensureStarted)');
+											return;
+										} catch (e: any) {
+											lastError = e;
+
+											// Compute next delay based on phase
+											const elapsedNow = Date.now() - retryStart;
+											if (elapsedNow < RETRY_PHASE1_DURATION_MS) {
+												delay = delay === 0
+													? RETRY_INITIAL_DELAY_MS
+													: Math.min(delay * 2, RETRY_PHASE1_CAP_MS);
+											} else {
+												delay = RETRY_PHASE2_INTERVAL_MS;
+											}
+
+											self.logger.info(`Activation retry in ${delay / 1000}s (elapsed: ${Math.round(elapsedNow / 1000)}s)`);
+										}
+									}
+
                 })().catch((err) => {
                     startingPromise = null;
                     throw err;

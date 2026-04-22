@@ -111,7 +111,7 @@ export class SignalRPrivateWorkflowClient {
 
 		this.conn = this.client.raw;
 
-		// Pass retry budget to the underlying HubConnection (for reconnect)
+		// Pass retry budget to the underlying HubConnection (for reconnect after drop)
 		this.conn._setRetryBudget({
 			maxDurationMs: this.retryMaxDurationMs,
 			initialDelayMs: this.retryInitialDelayMs,
@@ -123,66 +123,17 @@ export class SignalRPrivateWorkflowClient {
 		// Wire event handlers BEFORE start()
 		this.wireHandlers();
 
-		// Manual / single-node runs: fail fast with no retry
-		if (this.cfg.isSingleNodeRun) {
-			try {
-				await this.client.start();
-				this.log('info', 'SignalR connection established', {
-					connectionId: this.conn.connectionId
-				});
-			} catch (e: any) {
-				this.cfg.onConnectionError?.(e, {
-					phase: 'start',
-					reason: 'Failed to establish SignalR connection'
-				});
-				throw e;
-			}
-
-			await this.registerClient();
-			this.log('info', 'Ready for ExecutePrivateWorkflow messages');
-			return;
-		}
-
-		// Production mode: two-phase retry with exponential backoff
-		const startTime = Date.now();
-		let delay = 0;
-		let lastError: any;
-
-		while (true) {
-			if (delay > 0) {
-				await new Promise<void>(r => setTimeout(r, delay));
-			}
-
-			const elapsed = Date.now() - startTime;
-			if (elapsed >= this.retryMaxDurationMs) {
-				const err = lastError ?? new Error('Max retry duration exceeded');
-				this.log('error', `Initial connect failed after ${Math.round(elapsed / 60_000)} minutes`, err?.message ?? err);
-				this.cfg.onConnectionError?.(err, {
-					phase: 'start',
-					reason: `Failed to establish SignalR connection after ${Math.round(elapsed / 60_000)} minutes of retries`
-				});
-				throw err;
-			}
-
-			try {
-				await this.client.start();
-				this.log('info', 'SignalR connection established', {
-					connectionId: this.conn.connectionId
-				});
-				break; // success
-			} catch (e: any) {
-				lastError = e;
-
-				// Compute next delay based on which phase we're in
-				const elapsedAfterAttempt = Date.now() - startTime;
-				if (elapsedAfterAttempt < this.retryPhase1DurationMs) {
-					delay = delay === 0
-						? this.retryInitialDelayMs
-						: Math.min(delay * 2, this.retryPhase1CapMs);
-				} else {
-					delay = this.retryPhase2IntervalMs;
-				}
-			}
+		try {
+			await this.client.start();
+			this.log('info', 'SignalR connection established', {
+				connectionId: this.conn.connectionId
+			});
+		} catch (e: any) {
+			this.cfg.onConnectionError?.(e, {
+				phase: 'start',
+				reason: 'Failed to establish SignalR connection'
+			});
+			throw e;
 		}
 
 		// Now register this workflow path with the cloud hub
