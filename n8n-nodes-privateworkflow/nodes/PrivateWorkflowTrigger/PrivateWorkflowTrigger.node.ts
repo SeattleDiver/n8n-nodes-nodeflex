@@ -103,6 +103,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 
         let started = false;
         let startingPromise: Promise<void> | null = null;
+        let isReconnecting = false;
 
 				// Mutable client reference — reassigned on each retry attempt
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -392,6 +393,11 @@ export class PrivateWorkflowTrigger implements INodeType {
 							},
 
 							onConnectionLost: (err: unknown) => {
+								if (isReconnecting) {
+									self.logger?.info?.('Connection lost again — reconnect already in progress, ignoring');
+									return;
+								}
+								isReconnecting = true;
 								self.logger?.warn?.(`Connection lost (all quick reconnects failed): ${String(err)}`);
 								self.logger?.info?.('Resetting connection — will re-fetch hubInfo and reconnect...');
 								started = false;
@@ -399,6 +405,8 @@ export class PrivateWorkflowTrigger implements INodeType {
 								// Re-enter the full retry loop (getHubInfo → create client → connect)
 								ensureStarted().catch((retryErr) => {
 									self.logger?.error?.(`Full reconnect failed: ${(retryErr as Error)?.message ?? retryErr}`);
+								}).finally(() => {
+									isReconnecting = false;
 								});
 							}
 					});
