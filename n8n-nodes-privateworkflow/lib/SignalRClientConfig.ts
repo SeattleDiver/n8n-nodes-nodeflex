@@ -28,6 +28,7 @@ export interface SignalRClientConfig {
     }) => Promise<any> | any;
 
     onConnectionError?: (error: unknown, context?: Record<string, unknown>) => void;
+    onConnectionLost?: (error: unknown) => void;
 
     // Retry / backoff configuration (defaults applied in SignalRPrivateWorkflowClient)
     retryMaxDurationMs?: number;       // Total retry budget (default: 8 hours = 28_800_000)

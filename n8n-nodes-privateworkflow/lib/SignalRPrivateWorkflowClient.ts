@@ -179,9 +179,10 @@ export class SignalRPrivateWorkflowClient {
 			);
 		});
 
-		// Closed
+		// Closed (all reconnect attempts exhausted)
 		this.conn.onclose((err) => {
-			this.log('warn', 'Connection closed', err?.message);
+			this.log('warn', 'Connection closed permanently', err?.message);
+			this.cfg.onConnectionLost?.(err);
 		});
 	}
 

@@ -46,12 +46,13 @@ export class HubConnection {
     private options: IHttpConnectionOptions;
     private logLevel: LogLevel = LogLevel.Information;
 
-    // Two-phase retry budget configuration
-    private retryMaxDurationMs = 28_800_000;    // 8 hours
+    // Two-phase retry budget configuration (short defaults for HubConnection-level reconnect)
+    // Long retry with hubInfo re-fetch is handled at the trigger level
+    private retryMaxDurationMs = 60_000;          // 60s — quick reconnect for brief blips
     private retryInitialDelayMs = 2_000;
-    private retryPhase1CapMs = 60_000;
-    private retryPhase1DurationMs = 3_600_000;  // 1 hour
-    private retryPhase2IntervalMs = 900_000;    // 15 minutes
+    private retryPhase1CapMs = 10_000;
+    private retryPhase1DurationMs = 60_000;
+    private retryPhase2IntervalMs = 60_000;
 
     // Callbacks
     private onReconnectingCallbacks: Array<(error?: Error) => void> = [];

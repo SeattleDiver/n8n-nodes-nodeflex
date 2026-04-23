@@ -389,6 +389,17 @@ export class PrivateWorkflowTrigger implements INodeType {
 								// Properly propagate the error to n8n so the trigger terminates
 								const error = err instanceof Error ? err : new Error(String(err));
 								throw new NodeOperationError(self.getNode(), error);
+							},
+
+							onConnectionLost: (err: unknown) => {
+								self.logger?.warn?.(`Connection lost (all quick reconnects failed): ${String(err)}`);
+								self.logger?.info?.('Resetting connection — will re-fetch hubInfo and reconnect...');
+								started = false;
+								startingPromise = null;
+								// Re-enter the full retry loop (getHubInfo → create client → connect)
+								ensureStarted().catch((retryErr) => {
+									self.logger?.error?.(`Full reconnect failed: ${(retryErr as Error)?.message ?? retryErr}`);
+								});
 							}
 					});
 
