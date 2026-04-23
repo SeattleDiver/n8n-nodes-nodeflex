@@ -35,23 +35,17 @@ export class SignalRPrivateWorkflowClient {
 	private onceResolvers: Array<() => void> = [];
 
 	// ------------------------------------------------------------------
-	// Retry budget defaults
+	// Retry budget defaults (used for HubConnection same-URL reconnect)
 	// ------------------------------------------------------------------
-	private readonly retryMaxDurationMs: number;
 	private readonly retryInitialDelayMs: number;
 	private readonly retryPhase1CapMs: number;
-	private readonly retryPhase1DurationMs: number;
-	private readonly retryPhase2IntervalMs: number;
 
 	constructor(cfg: SignalRClientConfig) {
 		this.cfg = cfg;
 		this.hubService = cfg.hubService;
 
-		this.retryMaxDurationMs = cfg.retryMaxDurationMs ?? 28_800_000;      // 8 hours
 		this.retryInitialDelayMs = cfg.retryInitialDelayMs ?? 2_000;
 		this.retryPhase1CapMs = cfg.retryPhase1CapMs ?? 60_000;
-		this.retryPhase1DurationMs = cfg.retryPhase1DurationMs ?? 3_600_000; // 1 hour
-		this.retryPhase2IntervalMs = cfg.retryPhase2IntervalMs ?? 900_000;   // 15 minutes
 
 		this.log('info', 'SignalRPrivateWorkflowClient created', {
 			hubUrl: cfg.hubUrl,
@@ -111,13 +105,15 @@ export class SignalRPrivateWorkflowClient {
 
 		this.conn = this.client.raw;
 
-		// Pass retry budget to the underlying HubConnection (for reconnect after drop)
+		// Pass a short retry budget to HubConnection for same-URL reconnect (brief blips).
+		// After this budget expires, onConnectionLost fires and the trigger-level loop
+		// takes over with a full hubInfo re-fetch and the 8-hour budget.
 		this.conn._setRetryBudget({
-			maxDurationMs: this.retryMaxDurationMs,
+			maxDurationMs: 300_000,             // 5 minutes on same URL
 			initialDelayMs: this.retryInitialDelayMs,
 			phase1CapMs: this.retryPhase1CapMs,
-			phase1DurationMs: this.retryPhase1DurationMs,
-			phase2IntervalMs: this.retryPhase2IntervalMs,
+			phase1DurationMs: 300_000,          // all phase 1 (no phase 2 needed)
+			phase2IntervalMs: this.retryPhase1CapMs,
 		});
 
 		// Wire event handlers BEFORE start()
