@@ -46,6 +46,9 @@ export class HubConnection {
     private options: IHttpConnectionOptions;
     private logLevel: LogLevel = LogLevel.Information;
 
+    // Timeout for a single connect attempt (negotiate + WebSocket handshake)
+    private connectTimeoutMs = 30_000;
+
     // Two-phase retry budget configuration (short defaults for HubConnection-level reconnect)
     // Long retry with hubInfo re-fetch is handled at the trigger level
     private retryMaxDurationMs = 60_000;          // 60s — quick reconnect for brief blips
@@ -162,98 +165,129 @@ export class HubConnection {
     // ---------------------------------------------------------------------
 
     private async connectInternal(isReconnect = false): Promise<void> {
-        let finalUrl = this.baseUrl;
-        let accessToken = '';
+        const abortController = new AbortController();
+        const { signal } = abortController;
 
-        if (this.options.accessTokenFactory) {
-            try { accessToken = await this.options.accessTokenFactory(); }
-            catch { /* token factory failed — continue without token */ }
-        }
+        // Single deadline covering negotiate + WebSocket handshake
+        const timeout = setTimeout(() => abortController.abort(), this.connectTimeoutMs);
 
-        // ---------------- Negotiate ----------------
-        if (!this.options.skipNegotiation) {
-            let negotiateUrl = `${this.baseUrl}/negotiate?apiKey=${encodeURIComponent(this.apiKey)}`;
-            if (this.group) negotiateUrl += `&group=${encodeURIComponent(this.group)}`;
+        try {
+            let finalUrl = this.baseUrl;
+            let accessToken = '';
 
-            const headers: any = {};
-            if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-            const response = await fetch(negotiateUrl, { method: "POST", headers });
-            if (!response.ok) throw new Error(`Negotiate failed: ${response.status}`);
-
-            const negotiation = await response.json() as {
-								url?: string;
-								accessToken?: string;
-								connectionId?: string;
-						};
-						if (negotiation.url) {
-								finalUrl = negotiation.url;
-								if (negotiation.accessToken) accessToken = negotiation.accessToken;
-
-						} else if (negotiation.connectionId) {
-								this.connectionId = negotiation.connectionId;
-								const sep = finalUrl.includes("?") ? "&" : "?";
-								finalUrl += `${sep}id=${encodeURIComponent(negotiation.connectionId)}`;
-						}
-        }
-
-        // ---------------- WebSocket URL ----------------
-        let wsUrl = finalUrl.replace(/^http/, "ws");
-
-        if (accessToken) {
-            const sep = wsUrl.includes("?") ? "&" : "?";
-            wsUrl += `${sep}access_token=${encodeURIComponent(accessToken)}`;
-        }
-
-        // Add WebSocket-only query params (group)
-        if (this.options.webSocketQueryParams) {
-            for (const [k, v] of Object.entries(this.options.webSocketQueryParams)) {
-                const sep = wsUrl.includes("?") ? "&" : "?";
-                wsUrl += `${sep}${k}=${encodeURIComponent(v)}`;
+            if (this.options.accessTokenFactory) {
+                try { accessToken = await this.options.accessTokenFactory(); }
+                catch { /* token factory failed — continue without token */ }
             }
-        }
 
-        // ---------------- WebSocket Connect ----------------
-        // Close any previous socket and strip its handlers to prevent ghost callbacks
-        if (this.socket) {
-            const old = this.socket;
-            old.onopen = old.onclose = old.onerror = old.onmessage = null;
-            this.socket = null;
-            try { old.close(); } catch { /* already closed */ }
-        }
+            // ---------------- Negotiate ----------------
+            if (!this.options.skipNegotiation) {
+                let negotiateUrl = `${this.baseUrl}/negotiate?apiKey=${encodeURIComponent(this.apiKey)}`;
+                if (this.group) negotiateUrl += `&group=${encodeURIComponent(this.group)}`;
 
-        return new Promise((resolve, reject) => {
-            const ws = new WebSocket(wsUrl);
-            this.socket = ws;
+                const headers: any = {};
+                if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
-            ws.onopen = () => {
-                ws.send(`{"protocol":"json","version":1}\x1e`);
-            };
+                const response = await fetch(negotiateUrl, { method: "POST", headers, signal });
+                if (!response.ok) throw new Error(`Negotiate failed: ${response.status}`);
 
-            ws.onerror = (e: any) => {
-                if (!isReconnect && !this.connectionId) {
-                    reject(new Error(e.message || "WebSocket Error"));
+                const negotiation = await response.json() as {
+									url?: string;
+									accessToken?: string;
+									connectionId?: string;
+							};
+							if (negotiation.url) {
+									finalUrl = negotiation.url;
+									if (negotiation.accessToken) accessToken = negotiation.accessToken;
+
+							} else if (negotiation.connectionId) {
+									this.connectionId = negotiation.connectionId;
+									const sep = finalUrl.includes("?") ? "&" : "?";
+									finalUrl += `${sep}id=${encodeURIComponent(negotiation.connectionId)}`;
+							}
+            }
+
+            // ---------------- WebSocket URL ----------------
+            let wsUrl = finalUrl.replace(/^http/, "ws");
+
+            if (accessToken) {
+                const sep = wsUrl.includes("?") ? "&" : "?";
+                wsUrl += `${sep}access_token=${encodeURIComponent(accessToken)}`;
+            }
+
+            if (this.options.webSocketQueryParams) {
+                for (const [k, v] of Object.entries(this.options.webSocketQueryParams)) {
+                    const sep = wsUrl.includes("?") ? "&" : "?";
+                    wsUrl += `${sep}${k}=${encodeURIComponent(v)}`;
                 }
-                this.log(LogLevel.Error, "WebSocket error", e.message);
-            };
+            }
 
-            ws.onclose = (e) => {
-                this.cleanup();
-                if (this.isStopped) {
-                    this.fireCloseCallbacks(new Error(e.reason || "Closed"));
-                } else {
-                    this.handleAutomaticReconnect();
+            // ---------------- WebSocket Connect ----------------
+            // Close any previous socket and strip its handlers to prevent ghost callbacks
+            if (this.socket) {
+                const old = this.socket;
+                old.onopen = old.onclose = old.onerror = old.onmessage = null;
+                this.socket = null;
+                try { old.close(); } catch { /* already closed */ }
+            }
+
+            await new Promise<void>((resolve, reject) => {
+                // If already timed out before reaching WebSocket phase, bail immediately
+                if (signal.aborted) {
+                    return reject(new Error(`Connect timed out after ${this.connectTimeoutMs}ms`));
                 }
-            };
 
-            ws.onmessage = (event) => {
-                this.handleRawMessage(event, () => {
-                    this.startKeepAlive();
-                    if (isReconnect) this.fireReconnectedCallbacks();
-                    resolve();
-                });
-            };
-        });
+                const ws = new WebSocket(wsUrl);
+                this.socket = ws;
+
+                const onAbort = () => {
+                    ws.onopen = ws.onclose = ws.onerror = ws.onmessage = null;
+                    this.socket = null;
+                    try { ws.close(); } catch { /* ignore */ }
+                    reject(new Error(`Connect timed out after ${this.connectTimeoutMs}ms`));
+                };
+                signal.addEventListener('abort', onAbort, { once: true });
+
+                ws.onopen = () => {
+                    ws.send(`{"protocol":"json","version":1}\x1e`);
+                };
+
+                ws.onerror = (e: any) => {
+                    signal.removeEventListener('abort', onAbort);
+                    if (!isReconnect && !this.connectionId) {
+                        reject(new Error(e.message || "WebSocket Error"));
+                    }
+                    this.log(LogLevel.Error, "WebSocket error", e.message);
+                };
+
+                ws.onclose = (e) => {
+                    signal.removeEventListener('abort', onAbort);
+                    this.cleanup();
+                    if (this.isStopped) {
+                        this.fireCloseCallbacks(new Error(e.reason || "Closed"));
+                    } else {
+                        this.handleAutomaticReconnect();
+                    }
+                };
+
+                ws.onmessage = (event) => {
+                    signal.removeEventListener('abort', onAbort);
+                    this.handleRawMessage(event, () => {
+                        this.startKeepAlive();
+                        if (isReconnect) this.fireReconnectedCallbacks();
+                        resolve();
+                    });
+                };
+            });
+        } catch (err: any) {
+            // Normalize AbortError from fetch into a consistent timeout message
+            if (err.name === 'AbortError') {
+                throw new Error(`Connect timed out after ${this.connectTimeoutMs}ms`);
+            }
+            throw err;
+        } finally {
+            clearTimeout(timeout);
+        }
     }
 
     // ---------------------------------------------------------------------

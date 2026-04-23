@@ -200,7 +200,7 @@ export class SignalRPrivateWorkflowClient {
 
 		try {
 			const ack = await this.conn.invoke('RegisterPrivateWorkflow', registerMessage);
-			this.log('info', 'Registration attempt ' + this.cfg.hubPath, {
+			this.log('info', 'Hub registration for ' + this.cfg.hubPath + ' successful.', {
 				path: this.cfg.hubPath,
 				apiKey: mask(this.cfg.apiKey)
 			});
