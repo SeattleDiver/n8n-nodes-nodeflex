@@ -214,6 +214,14 @@ export class HubConnection {
         }
 
         // ---------------- WebSocket Connect ----------------
+        // Close any previous socket and strip its handlers to prevent ghost callbacks
+        if (this.socket) {
+            const old = this.socket;
+            old.onopen = old.onclose = old.onerror = old.onmessage = null;
+            this.socket = null;
+            try { old.close(); } catch { /* already closed */ }
+        }
+
         return new Promise((resolve, reject) => {
             const ws = new WebSocket(wsUrl);
             this.socket = ws;
