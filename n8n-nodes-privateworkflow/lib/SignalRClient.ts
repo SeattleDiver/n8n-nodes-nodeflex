@@ -237,10 +237,13 @@ export class HubConnection {
                     return reject(new Error(`Connect timed out after ${this.connectTimeoutMs}ms`));
                 }
 
+                let settled = false;
                 const ws = new WebSocket(wsUrl);
                 this.socket = ws;
 
                 const onAbort = () => {
+                    if (settled) return;
+                    settled = true;
                     ws.onopen = ws.onclose = ws.onerror = ws.onmessage = null;
                     this.socket = null;
                     try { ws.close(); } catch { /* ignore */ }
@@ -254,16 +257,21 @@ export class HubConnection {
 
                 ws.onerror = (e: any) => {
                     signal.removeEventListener('abort', onAbort);
-                    if (!isReconnect && !this.connectionId) {
-                        reject(new Error(e.message || "WebSocket Error"));
-                    }
                     this.log(LogLevel.Error, "WebSocket error", e.message);
+                    if (settled) return;
+                    settled = true;
+                    reject(new Error(e.message || "WebSocket Error"));
                 };
 
                 ws.onclose = (e) => {
                     signal.removeEventListener('abort', onAbort);
                     this.cleanup();
-                    if (this.isStopped) {
+                    if (settled) return;
+                    settled = true;
+                    if (isReconnect) {
+                        // Let handleAutomaticReconnect's catch block handle retry
+                        reject(new Error(e.reason || "WebSocket closed during reconnect"));
+                    } else if (this.isStopped) {
                         this.fireCloseCallbacks(new Error(e.reason || "Closed"));
                     } else {
                         this.handleAutomaticReconnect();
@@ -273,6 +281,8 @@ export class HubConnection {
                 ws.onmessage = (event) => {
                     signal.removeEventListener('abort', onAbort);
                     this.handleRawMessage(event, () => {
+                        if (settled) return;
+                        settled = true;
                         this.startKeepAlive();
                         if (isReconnect) this.fireReconnectedCallbacks();
                         resolve();
