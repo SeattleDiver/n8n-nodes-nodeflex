@@ -140,7 +140,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 					{
 						throw new NodeOperationError(self.getNode(), 'Blob URL is unavailable.  Hub service is down.');
 					}
-					self.logger.info(`Resolved hub for path: ${hubPath}`);
+					self.logger.info('Hub endpoints resolved');
 
 					client = new SignalRPrivateWorkflowClient({
 							hubUrl,
@@ -210,7 +210,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 									if (wfPayload.type === 'reference') {
 										const referenceUrl = wfPayload.value;
 
-										this.logger.info(`[PrivateWorkflowTrigger] reference URL ${referenceUrl}`)
+										this.logger.info('[PrivateWorkflowTrigger] Fetching reference payload')
 
 										if (!referenceUrl) {
 											throw new NodeOperationError(this.getNode(), 'Reference payload missing value/url');

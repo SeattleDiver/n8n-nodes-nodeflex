@@ -94,7 +94,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 			);
 		}
 		const targetUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/results/${correlationId}`;
-		this.logger.info(`[GetPrivateWorkflowResult] targetUrl = ${targetUrl}`);
+		this.logger.info('[GetPrivateWorkflowResult] Fetching workflow result');
 
 		// Auth uses x-api-key header; httpRequestWithAuthentication not applicable
 		// because the credential doesn't define a generic authenticate property.

@@ -240,7 +240,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 						},
 					);
 				}
-				this.logger.info("BlobURL: " + blobUrl);
+				this.logger.info('Blob storage endpoint resolved');
 
 				const apiUrl = hubInfo.apiUrl;
 				if (!apiUrl) {
@@ -253,7 +253,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 					);
 				}
 
-				this.logger.info(`Resolved hub URLs for ${hubPath}`);
+				this.logger.info('Hub endpoints resolved');
 
 				// Construct target URL (keep existing behavior)
 				const normalizedUrl = apiUrl.replace(/\/+$/, '');
@@ -444,7 +444,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 					apiKey,
 				}, http);
 
-				this.logger.info(`Calling private workflow at ${targetUrl}`);
+				this.logger.info('Calling private workflow');
 
 				const response = await client.post(targetUrl, request as unknown as Record<string, unknown>);
 
