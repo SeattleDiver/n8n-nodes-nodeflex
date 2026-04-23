@@ -58,6 +58,7 @@ export class HubConnection {
     private onReconnectingCallbacks: Array<(error?: Error) => void> = [];
     private onReconnectedCallbacks: Array<(connectionId?: string) => void> = [];
     private onCloseCallbacks: Array<(error?: Error) => void> = [];
+    private onRetryAttemptCallbacks: Array<(delayMs: number, elapsedMs: number) => void> = [];
 
     constructor(url: string, apiKey: string, group: string, options: IHttpConnectionOptions) {
         this.baseUrl = url;
@@ -139,6 +140,7 @@ export class HubConnection {
     // Lifecycle
     public onreconnecting(cb: (error?: Error) => void) { this.onReconnectingCallbacks.push(cb); }
     public onreconnected(cb: (id?: string) => void) { this.onReconnectedCallbacks.push(cb); }
+    public onretryattempt(cb: (delayMs: number, elapsedMs: number) => void) { this.onRetryAttemptCallbacks.push(cb); }
     public _setReconnectDelays(_delays: number[]) { /* legacy no-op, use _setRetryBudget */ }
     public _setRetryBudget(cfg: {
         maxDurationMs?: number;
@@ -281,6 +283,7 @@ export class HubConnection {
                     // Phase 2: fixed interval
                     delay = this.retryPhase2IntervalMs;
                 }
+                this.fireRetryAttemptCallbacks(delay, elapsedAfterAttempt);
             }
         }
 
@@ -350,6 +353,10 @@ export class HubConnection {
 
     private fireCloseCallbacks(err?: Error) {
         this.onCloseCallbacks.forEach(cb => { try { cb(err); } catch { /* callback error suppressed */ } });
+    }
+
+    private fireRetryAttemptCallbacks(delayMs: number, elapsedMs: number) {
+        this.onRetryAttemptCallbacks.forEach(cb => { try { cb(delayMs, elapsedMs); } catch { /* callback error suppressed */ } });
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

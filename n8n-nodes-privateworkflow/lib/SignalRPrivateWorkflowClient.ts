@@ -165,6 +165,11 @@ export class SignalRPrivateWorkflowClient {
 			this.log('warn', 'Reconnecting...', err?.message);
 		});
 
+		// Retry attempt (each backoff iteration)
+		this.conn.onretryattempt((delayMs, elapsedMs) => {
+			this.log('info', `Reconnect retry in ${delayMs / 1000}s (elapsed: ${Math.round(elapsedMs / 1000)}s)`);
+		});
+
 		// Reconnected
 		this.conn.onreconnected(async (id) => {
 			this.log('info', 'Reconnected', { connectionId: id });
