@@ -1,5 +1,5 @@
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-import { setTimeout } from 'node:timers';
+// import { setTimeout } from 'node:timers';
 import {
 	ITriggerFunctions,
 	INodeType,
@@ -10,7 +10,7 @@ import {
 } from 'n8n-workflow';
 
 import { SignalRPrivateWorkflowClient } from '../../lib/SignalRPrivateWorkflowClient'
-import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
+import { SignalRConnectionPool } from '../../lib/SignalRConnectionPool';
 import { HubProfileService } from "../../lib/HubProfileService";
 import { HUB_BASE_URL } from "../../lib/HubConfig";
 import { IN8nHttpHelper } from "../../lib/N8nHttpHelper";
@@ -190,7 +190,6 @@ export class PrivateWorkflowTrigger implements INodeType {
 										respondMode = 'immediately';
 									}
 
-									// const correlationId = crypto.randomUUID();
 									const correlationId = request?.correlationId;
 									if (!correlationId || correlationId == "")
 									{
@@ -251,9 +250,10 @@ export class PrivateWorkflowTrigger implements INodeType {
 										};
 									}
 
+									// Emit correlation ID
 									const outItem: INodeExecutionData = {
 										json: {
-											__correlationId: correlationId
+											__correlationId: hubPath.toLowerCase().replace("/", ":") + ":" + correlationId
 										},
 									};
 									if (normalizedPayload.type === 'inline' && normalizedPayload.encoding === 'base64') {
@@ -338,25 +338,22 @@ export class PrivateWorkflowTrigger implements INodeType {
 											// Create one output item
 											// this.emit([[outItem]]);
 
-											const entry = {
-												correlationId,
-												client,     // the live SignalRPrivateWorkflowClient
-												requestId,  // original hub RequestId
-												path: hubPath,
-												isManual: this.getMode && this.getMode() === 'manual',
-												timeout: setTimeout(() => {
-													PrivateWorkflowResponseRegistry.delete(correlationId);
-													self.logger?.warn?.(
-														`[PrivateWorkflowTrigger] Timeout waiting for response correlationId=${correlationId}`
-													);
-												}, 120_000),
-											};
+											const timeout = setTimeout(() => {
+												SignalRConnectionPool.clearPendingRequest(hubPath);
+												self.logger?.warn?.(
+													`[PrivateWorkflowTrigger] Timeout waiting for response path=${hubPath}`
+												);
+											}, 120_000);
 
-											// Register the pending response in the global registry
-											PrivateWorkflowResponseRegistry.register(correlationId, entry);
+											SignalRConnectionPool.setPendingRequest(hubPath, {
+												correlationId,
+												requestId,
+												timeout,
+												isManual: this.getMode && this.getMode() === 'manual',
+											});
 
 											self.logger?.info?.(
-												`[PrivateWorkflowTrigger] Registered correlationId=${correlationId} for deferred response (requestId=${requestId})`
+												`[PrivateWorkflowTrigger] Registered path=${hubPath} for deferred response (requestId=${requestId})`
 											);
 											return;
 										}

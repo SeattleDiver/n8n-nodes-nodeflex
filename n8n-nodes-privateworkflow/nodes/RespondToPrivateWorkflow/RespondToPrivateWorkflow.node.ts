@@ -8,7 +8,7 @@ import {
 	IDataObject,
 	NodeOperationError
 } from 'n8n-workflow';
-import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
+import { SignalRConnectionPool } from '../../lib/SignalRConnectionPool';
 import { PrivateWorkflowPayload, PrivateWorkflowPayloadEncoding } from '../../lib/PrivateWorkflowPayload';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
 import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
@@ -27,6 +27,15 @@ export class RespondToPrivateWorkflow implements INodeType {
 		inputs: ['main'],
 		outputs: ['main'],
 		properties: [
+			{
+				displayName: 'Workflow Name',
+				name: 'workflowName',
+				type: 'string',
+				default: '',
+				placeholder: 'e.g. my-workflow',
+				required: true,
+				description: 'The name of the workflow (required)',
+			},
 			{
 				displayName: 'Respond With',
 				name: 'respondWith',
@@ -158,17 +167,47 @@ export class RespondToPrivateWorkflow implements INodeType {
 		const items = this.getInputData();
 		const outputItems: INodeExecutionData[] = [];
 
-	  let correlationId = this.getNodeParameter('correlationId', 0) as string;
-		correlationId = correlationId.trim();
-		const entry = PrivateWorkflowResponseRegistry.get(correlationId);
+		// Get the full correlation ID from the trigger output (format: "accountPath:workflowName:correlationId")
+		let fullCorrelationId = this.getNodeParameter('correlationId', 0) as string;
+		fullCorrelationId = fullCorrelationId.trim();
 
-		if (!entry) {
+		// Split on colons - should have 3 parts: accountPath, workflowName, correlationId
+		const parts = fullCorrelationId.split(':');
+		if (parts.length < 3) {
+			throw new NodeOperationError(
+				this.getNode(),
+				`Invalid correlation ID format. Expected "accountPath:workflowName:correlationId" but got: ${fullCorrelationId}`
+			);
+		}
+
+		// Join first two parts back together since they might contain additional colons
+		const accountPath = parts[0];
+		const workflowName = parts[1];
+		const correlationId = parts.slice(2).join(':'); // In case correlationId contains colons (UUID+suffix)
+
+		// Reconstruct path in the format used by the trigger: accountPath/workflowName
+		const path = `${accountPath}/${workflowName}`;
+
+		const pendingRequest = SignalRConnectionPool.getPendingRequest(path);
+		const client = SignalRConnectionPool.get(path);
+
+		if (!pendingRequest || !client) {
 			this.logger?.warn?.(
-				`[RespondToPrivateWorkflow] No pending SignalR entry for correlation=${correlationId}`
+				`[RespondToPrivateWorkflow] No pending SignalR entry for path=${path}`
 			);
 			// still return items so workflow debugging isn't broken
 			return [items];
 		}
+
+		// Reconstruct entry object from pool data
+		const entry = {
+			client,
+			correlationId: pendingRequest.correlationId,
+			requestId: pendingRequest.requestId,
+			path,
+			timeout: pendingRequest.timeout,
+			isManual: pendingRequest.isManual,
+		};
 
 		let encoding: PrivateWorkflowPayloadEncoding = "json";
 		const respondWith = this.getNodeParameter('respondWith', 0) as string;
@@ -323,13 +362,13 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 					if (!binaryData || !binaryPropertyName) {
 						this.logger?.warn?.(
-							`[RespondToPrivateWorkflow] No binary data for correlation=${correlationId}`
+							`[RespondToPrivateWorkflow] No binary data for path=${path}`
 						);
 
 						payload = null;
 
 						outputItems.push({
-							json: { correlationId, status: 'Success' },
+							json: { correlationId: correlationId, status: 'Success' },
 						});
 
 					} else {
@@ -337,7 +376,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 						payload = binaryData.data;
 
 						outputItems.push({
-							json: { correlationId, status: 'Success' },
+							json: { correlationId: correlationId, status: 'Success' },
 							binary: {
 								[binaryPropertyName]: binaryData,
 							},
@@ -352,7 +391,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 					payload = null;
 					encoding = "json";
 						outputItems.push({
-							json: { correlationId, status: 'Success' },
+							json: { correlationId: correlationId, status: 'Success' },
 						});
 					break;
 			}
@@ -487,7 +526,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			// Send a single response to the hub AFTER collecting payload
 			// ------------------------------------------------------------------------------------
 			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] Sending response → corr=${correlationId}, mode=${respondWith}`
+				`[RespondToPrivateWorkflow] Sending response → path=${path}, mode=${respondWith}`
 			);
 
 			await entry.client.sendResponseToHub(
@@ -500,10 +539,10 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 			// Cleanup once
 			clearTimeout(entry.timeout);
-			PrivateWorkflowResponseRegistry.delete(correlationId);
+			SignalRConnectionPool.clearPendingRequest(path);
 
 			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] Response sent & cleared (corr=${correlationId})`
+				`[RespondToPrivateWorkflow] Response sent & cleared (path=${path})`
 			);
 
 			// Return items to workflow
