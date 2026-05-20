@@ -28,15 +28,6 @@ export class RespondToPrivateWorkflow implements INodeType {
 		outputs: ['main'],
 		properties: [
 			{
-				displayName: 'Workflow Name',
-				name: 'workflowName',
-				type: 'string',
-				default: '',
-				placeholder: 'e.g. my-workflow',
-				required: true,
-				description: 'The name of the workflow (required)',
-			},
-			{
 				displayName: 'Respond With',
 				name: 'respondWith',
 				type: 'options',
