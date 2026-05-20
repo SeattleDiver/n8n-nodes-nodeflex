@@ -167,10 +167,26 @@ export class RespondToPrivateWorkflow implements INodeType {
 		const items = this.getInputData();
 		const outputItems: INodeExecutionData[] = [];
 
+		// Get the full correlation ID from the trigger output (format: "accountPath:workflowName:correlationId")
+		let fullCorrelationId = this.getNodeParameter('correlationId', 0) as string;
+		fullCorrelationId = fullCorrelationId.trim();
 
-		//const path = pathPrefixedCorrelationId.substring(0, colonIndex);
-		const path = this.getNodeParameter('workflowName', 0) as string;
-	  let correlationId = this.getNodeParameter('correlationId', 0) as string;
+		// Split on colons - should have 3 parts: accountPath, workflowName, correlationId
+		const parts = fullCorrelationId.split(':');
+		if (parts.length < 3) {
+			throw new NodeOperationError(
+				this.getNode(),
+				`Invalid correlation ID format. Expected "accountPath:workflowName:correlationId" but got: ${fullCorrelationId}`
+			);
+		}
+
+		// Join first two parts back together since they might contain additional colons
+		const accountPath = parts[0];
+		const workflowName = parts[1];
+		const correlationId = parts.slice(2).join(':'); // In case correlationId contains colons (UUID+suffix)
+
+		// Reconstruct path in the format used by the trigger: accountPath/workflowName
+		const path = `${accountPath}/${workflowName}`;
 
 		const pendingRequest = SignalRConnectionPool.getPendingRequest(path);
 		const client = SignalRConnectionPool.get(path);

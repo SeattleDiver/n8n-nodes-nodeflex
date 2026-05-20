@@ -253,7 +253,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 									// Emit correlation ID
 									const outItem: INodeExecutionData = {
 										json: {
-											__correlationId: correlationId
+											__correlationId: hubPath.toLowerCase().replace("/", ":") + ":" + correlationId
 										},
 									};
 									if (normalizedPayload.type === 'inline' && normalizedPayload.encoding === 'base64') {
