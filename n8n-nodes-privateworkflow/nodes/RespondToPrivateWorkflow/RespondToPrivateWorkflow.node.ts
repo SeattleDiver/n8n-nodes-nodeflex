@@ -167,22 +167,10 @@ export class RespondToPrivateWorkflow implements INodeType {
 		const items = this.getInputData();
 		const outputItems: INodeExecutionData[] = [];
 
-	  let pathPrefixedCorrelationId = this.getNodeParameter('correlationId', 0) as string;
-		pathPrefixedCorrelationId = pathPrefixedCorrelationId.trim();
-
-		// Extract the path from the path-prefixed correlationId (format: "path:correlationId")
-		const colonIndex = pathPrefixedCorrelationId.lastIndexOf('/');
-		if (colonIndex === -1) {
-			throw new NodeOperationError(
-				this.getNode(),
-				`Invalid correlation ID format. Expected "path/correlationId" but got: ${pathPrefixedCorrelationId}`
-			);
-		}
 
 		//const path = pathPrefixedCorrelationId.substring(0, colonIndex);
-		const workflowName = this.getNodeParameter('workflowName', 0) as string;
-		const path = workflowName;
-		const correlationId = pathPrefixedCorrelationId.substring(colonIndex + 1);
+		const path = this.getNodeParameter('workflowName', 0) as string;
+	  let correlationId = this.getNodeParameter('correlationId', 0) as string;
 
 		const entry = PrivateWorkflowResponseRegistry.get(path);
 
@@ -353,7 +341,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 						payload = null;
 
 						outputItems.push({
-							json: { correlationId: pathPrefixedCorrelationId, status: 'Success' },
+							json: { correlationId: correlationId, status: 'Success' },
 						});
 
 					} else {
@@ -361,7 +349,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 						payload = binaryData.data;
 
 						outputItems.push({
-							json: { correlationId: pathPrefixedCorrelationId, status: 'Success' },
+							json: { correlationId: correlationId, status: 'Success' },
 							binary: {
 								[binaryPropertyName]: binaryData,
 							},
@@ -376,7 +364,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 					payload = null;
 					encoding = "json";
 						outputItems.push({
-							json: { correlationId: pathPrefixedCorrelationId, status: 'Success' },
+							json: { correlationId: correlationId, status: 'Success' },
 						});
 					break;
 			}

@@ -190,7 +190,6 @@ export class PrivateWorkflowTrigger implements INodeType {
 										respondMode = 'immediately';
 									}
 
-									// const correlationId = crypto.randomUUID();
 									const correlationId = request?.correlationId;
 									if (!correlationId || correlationId == "")
 									{
@@ -251,12 +250,10 @@ export class PrivateWorkflowTrigger implements INodeType {
 										};
 									}
 
-									// Emit correlation ID with path prefix for tracking
-									const pathPrefixedCorrelationId = `${hubPath}/${correlationId}`;
-
+									// Emit correlation ID
 									const outItem: INodeExecutionData = {
 										json: {
-											__correlationId: pathPrefixedCorrelationId
+											__correlationId: correlationId
 										},
 									};
 									if (normalizedPayload.type === 'inline' && normalizedPayload.encoding === 'base64') {
