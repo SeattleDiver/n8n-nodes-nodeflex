@@ -31,21 +31,27 @@ interface PoolEntry {
 
 const connectionPool = new Map<string, PoolEntry>();
 
+// Helper: Normalize path to lowercase for consistent key lookups
+function normalizePathKey(path: string): string {
+	return path.toLowerCase();
+}
+
 // Public API
 
 /**
  * Retrieves a connection for the given path, if it exists.
  */
 export function getConnection(path: string): SignalRPrivateWorkflowClient | undefined {
-	return connectionPool.get(path)?.client;
+	return connectionPool.get(normalizePathKey(path))?.client;
 }
 
 /**
  * Stores or updates a connection for the given path.
  */
 export function setConnection(path: string, client: SignalRPrivateWorkflowClient): void {
-	const existing = connectionPool.get(path);
-	connectionPool.set(path, {
+	const key = normalizePathKey(path);
+	const existing = connectionPool.get(key);
+	connectionPool.set(key, {
 		client,
 		pendingRequest: existing?.pendingRequest,
 	});
@@ -55,7 +61,7 @@ export function setConnection(path: string, client: SignalRPrivateWorkflowClient
  * Removes a connection for the given path.
  */
 export function removeConnection(path: string): void {
-	connectionPool.delete(path);
+	connectionPool.delete(normalizePathKey(path));
 }
 
 /**
@@ -92,7 +98,8 @@ export function setPendingRequest(
 	path: string,
 	request: PendingRequestContext,
 ): void {
-	const entry = connectionPool.get(path);
+	const key = normalizePathKey(path);
+	const entry = connectionPool.get(key);
 	if (!entry) return;
 
 	// Clear any existing timeout
@@ -107,14 +114,15 @@ export function setPendingRequest(
  * Retrieves the pending request for a given path, if any.
  */
 export function getPendingRequest(path: string): PendingRequestContext | undefined {
-	return connectionPool.get(path)?.pendingRequest;
+	return connectionPool.get(normalizePathKey(path))?.pendingRequest;
 }
 
 /**
  * Clears the pending request for a given path.
  */
 export function clearPendingRequest(path: string): void {
-	const entry = connectionPool.get(path);
+	const key = normalizePathKey(path);
+	const entry = connectionPool.get(key);
 	if (!entry) return;
 
 	if (entry.pendingRequest?.timeout) {
