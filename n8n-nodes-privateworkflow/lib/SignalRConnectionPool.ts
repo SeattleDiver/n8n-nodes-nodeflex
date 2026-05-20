@@ -1,17 +1,35 @@
-// -----------------------------------------------------------------------------
-// SignalRConnectionPool.ts
-// -----------------------------------------------------------------------------
-// Manages a pool of SignalR connections, tracking a single connection per path.
-// Provides methods to get, set, and remove connections.
-// 
-// This allows multiple workflow triggers (each with a unique path) to maintain
-// their own persistent connections, while supporting connection reuse.
-// -----------------------------------------------------------------------------
-
+// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
+import { clearTimeout } from 'node:timers';
 import type { SignalRPrivateWorkflowClient } from './SignalRPrivateWorkflowClient';
 
-// Storage: Map of path → SignalRPrivateWorkflowClient
-const connectionPool = new Map<string, SignalRPrivateWorkflowClient>();
+// -----------------------------------------------------------------------------
+// Type: Pending Request Context
+// -----------------------------------------------------------------------------
+/**
+ * Metadata about a pending private workflow response waiting to be sent.
+ * Stored in the connection pool for a given path.
+ */
+export interface PendingRequestContext {
+	/** The original correlationId from the hub */
+	correlationId: string;
+
+	/** RequestId originally sent by the hub (needed for response correlation) */
+	requestId: string;
+
+	/** Timeout handle (cleared when the workflow responds or times out) */
+	timeout?: NodeJS.Timeout;
+
+	/** True if this was registered during a manual execution run */
+	isManual?: boolean;
+}
+
+// Storage: Map of path → { client, pendingRequest }
+interface PoolEntry {
+	client: SignalRPrivateWorkflowClient;
+	pendingRequest?: PendingRequestContext;
+}
+
+const connectionPool = new Map<string, PoolEntry>();
 
 // Public API
 
@@ -19,14 +37,18 @@ const connectionPool = new Map<string, SignalRPrivateWorkflowClient>();
  * Retrieves a connection for the given path, if it exists.
  */
 export function getConnection(path: string): SignalRPrivateWorkflowClient | undefined {
-	return connectionPool.get(path);
+	return connectionPool.get(path)?.client;
 }
 
 /**
  * Stores or updates a connection for the given path.
  */
 export function setConnection(path: string, client: SignalRPrivateWorkflowClient): void {
-	connectionPool.set(path, client);
+	const existing = connectionPool.get(path);
+	connectionPool.set(path, {
+		client,
+		pendingRequest: existing?.pendingRequest,
+	});
 }
 
 /**
@@ -40,6 +62,11 @@ export function removeConnection(path: string): void {
  * Clears all connections from the pool.
  */
 export function clearAllConnections(): void {
+	for (const entry of connectionPool.values()) {
+		if (entry.pendingRequest?.timeout) {
+			clearTimeout(entry.pendingRequest.timeout);
+		}
+	}
 	connectionPool.clear();
 }
 
@@ -57,6 +84,46 @@ export function getActivePaths(): string[] {
 	return Array.from(connectionPool.keys());
 }
 
+/**
+ * Registers a pending request for a given path.
+ * Each path can have at most one pending request.
+ */
+export function setPendingRequest(
+	path: string,
+	request: PendingRequestContext,
+): void {
+	const entry = connectionPool.get(path);
+	if (!entry) return;
+
+	// Clear any existing timeout
+	if (entry.pendingRequest?.timeout) {
+		clearTimeout(entry.pendingRequest.timeout);
+	}
+
+	entry.pendingRequest = request;
+}
+
+/**
+ * Retrieves the pending request for a given path, if any.
+ */
+export function getPendingRequest(path: string): PendingRequestContext | undefined {
+	return connectionPool.get(path)?.pendingRequest;
+}
+
+/**
+ * Clears the pending request for a given path.
+ */
+export function clearPendingRequest(path: string): void {
+	const entry = connectionPool.get(path);
+	if (!entry) return;
+
+	if (entry.pendingRequest?.timeout) {
+		clearTimeout(entry.pendingRequest.timeout);
+	}
+
+	entry.pendingRequest = undefined;
+}
+
 // Export as default object for convenience
 export const SignalRConnectionPool = {
 	get: getConnection,
@@ -65,4 +132,7 @@ export const SignalRConnectionPool = {
 	clearAll: clearAllConnections,
 	count: countConnections,
 	getPaths: getActivePaths,
+	setPendingRequest,
+	getPendingRequest,
+	clearPendingRequest,
 };

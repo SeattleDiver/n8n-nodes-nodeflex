@@ -10,7 +10,7 @@ import {
 } from 'n8n-workflow';
 
 import { SignalRPrivateWorkflowClient } from '../../lib/SignalRPrivateWorkflowClient'
-import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
+import { SignalRConnectionPool } from '../../lib/SignalRConnectionPool';
 import { HubProfileService } from "../../lib/HubProfileService";
 import { HUB_BASE_URL } from "../../lib/HubConfig";
 import { IN8nHttpHelper } from "../../lib/N8nHttpHelper";
@@ -338,22 +338,19 @@ export class PrivateWorkflowTrigger implements INodeType {
 											// Create one output item
 											// this.emit([[outItem]]);
 
-											const entry = {
-												correlationId,
-												client,     // the live SignalRPrivateWorkflowClient
-												requestId,  // original hub RequestId
-												path: hubPath,
-												isManual: this.getMode && this.getMode() === 'manual',
-												timeout: setTimeout(() => {
-													PrivateWorkflowResponseRegistry.delete(hubPath);
-													self.logger?.warn?.(
-														`[PrivateWorkflowTrigger] Timeout waiting for response path=${hubPath}`
-													);
-												}, 120_000),
-											};
+											const timeout = setTimeout(() => {
+												SignalRConnectionPool.clearPendingRequest(hubPath);
+												self.logger?.warn?.(
+													`[PrivateWorkflowTrigger] Timeout waiting for response path=${hubPath}`
+												);
+											}, 120_000);
 
-											// Register the pending response using path as the key
-											PrivateWorkflowResponseRegistry.register(hubPath, entry);
+											SignalRConnectionPool.setPendingRequest(hubPath, {
+												correlationId,
+												requestId,
+												timeout,
+												isManual: this.getMode && this.getMode() === 'manual',
+											});
 
 											self.logger?.info?.(
 												`[PrivateWorkflowTrigger] Registered path=${hubPath} for deferred response (requestId=${requestId})`

@@ -8,7 +8,7 @@ import {
 	IDataObject,
 	NodeOperationError
 } from 'n8n-workflow';
-import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
+import { SignalRConnectionPool } from '../../lib/SignalRConnectionPool';
 import { PrivateWorkflowPayload, PrivateWorkflowPayloadEncoding } from '../../lib/PrivateWorkflowPayload';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
 import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
@@ -172,15 +172,26 @@ export class RespondToPrivateWorkflow implements INodeType {
 		const path = this.getNodeParameter('workflowName', 0) as string;
 	  let correlationId = this.getNodeParameter('correlationId', 0) as string;
 
-		const entry = PrivateWorkflowResponseRegistry.get(path);
+		const pendingRequest = SignalRConnectionPool.getPendingRequest(path);
+		const client = SignalRConnectionPool.get(path);
 
-		if (!entry) {
+		if (!pendingRequest || !client) {
 			this.logger?.warn?.(
 				`[RespondToPrivateWorkflow] No pending SignalR entry for path=${path}`
 			);
 			// still return items so workflow debugging isn't broken
 			return [items];
 		}
+
+		// Reconstruct entry object from pool data
+		const entry = {
+			client,
+			correlationId: pendingRequest.correlationId,
+			requestId: pendingRequest.requestId,
+			path,
+			timeout: pendingRequest.timeout,
+			isManual: pendingRequest.isManual,
+		};
 
 		let encoding: PrivateWorkflowPayloadEncoding = "json";
 		const respondWith = this.getNodeParameter('respondWith', 0) as string;
@@ -512,7 +523,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 			// Cleanup once
 			clearTimeout(entry.timeout);
-			PrivateWorkflowResponseRegistry.delete(path);
+			SignalRConnectionPool.clearPendingRequest(path);
 
 			this.logger?.info?.(
 				`[RespondToPrivateWorkflow] Response sent & cleared (path=${path})`
