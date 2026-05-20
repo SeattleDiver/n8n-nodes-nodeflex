@@ -1,5 +1,5 @@
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-import { setTimeout } from 'node:timers';
+// import { setTimeout } from 'node:timers';
 import {
 	ITriggerFunctions,
 	INodeType,
@@ -251,9 +251,12 @@ export class PrivateWorkflowTrigger implements INodeType {
 										};
 									}
 
+									// Emit correlation ID with path prefix for tracking
+									const pathPrefixedCorrelationId = `${hubPath}/${correlationId}`;
+
 									const outItem: INodeExecutionData = {
 										json: {
-											__correlationId: correlationId
+											__correlationId: pathPrefixedCorrelationId
 										},
 									};
 									if (normalizedPayload.type === 'inline' && normalizedPayload.encoding === 'base64') {
@@ -345,18 +348,18 @@ export class PrivateWorkflowTrigger implements INodeType {
 												path: hubPath,
 												isManual: this.getMode && this.getMode() === 'manual',
 												timeout: setTimeout(() => {
-													PrivateWorkflowResponseRegistry.delete(correlationId);
+													PrivateWorkflowResponseRegistry.delete(hubPath);
 													self.logger?.warn?.(
-														`[PrivateWorkflowTrigger] Timeout waiting for response correlationId=${correlationId}`
+														`[PrivateWorkflowTrigger] Timeout waiting for response path=${hubPath}`
 													);
 												}, 120_000),
 											};
 
-											// Register the pending response in the global registry
-											PrivateWorkflowResponseRegistry.register(correlationId, entry);
+											// Register the pending response using path as the key
+											PrivateWorkflowResponseRegistry.register(hubPath, entry);
 
 											self.logger?.info?.(
-												`[PrivateWorkflowTrigger] Registered correlationId=${correlationId} for deferred response (requestId=${requestId})`
+												`[PrivateWorkflowTrigger] Registered path=${hubPath} for deferred response (requestId=${requestId})`
 											);
 											return;
 										}

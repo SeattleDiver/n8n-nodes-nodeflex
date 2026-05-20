@@ -28,6 +28,15 @@ export class RespondToPrivateWorkflow implements INodeType {
 		outputs: ['main'],
 		properties: [
 			{
+				displayName: 'Workflow Name',
+				name: 'workflowName',
+				type: 'string',
+				default: '',
+				placeholder: 'e.g. my-workflow',
+				required: true,
+				description: 'The name of the workflow (required)',
+			},
+			{
 				displayName: 'Respond With',
 				name: 'respondWith',
 				type: 'options',
@@ -158,13 +167,28 @@ export class RespondToPrivateWorkflow implements INodeType {
 		const items = this.getInputData();
 		const outputItems: INodeExecutionData[] = [];
 
-	  let correlationId = this.getNodeParameter('correlationId', 0) as string;
-		correlationId = correlationId.trim();
-		const entry = PrivateWorkflowResponseRegistry.get(correlationId);
+	  let pathPrefixedCorrelationId = this.getNodeParameter('correlationId', 0) as string;
+		pathPrefixedCorrelationId = pathPrefixedCorrelationId.trim();
+
+		// Extract the path from the path-prefixed correlationId (format: "path:correlationId")
+		const colonIndex = pathPrefixedCorrelationId.lastIndexOf('/');
+		if (colonIndex === -1) {
+			throw new NodeOperationError(
+				this.getNode(),
+				`Invalid correlation ID format. Expected "path/correlationId" but got: ${pathPrefixedCorrelationId}`
+			);
+		}
+
+		//const path = pathPrefixedCorrelationId.substring(0, colonIndex);
+		const workflowName = this.getNodeParameter('workflowName', 0) as string;
+		const path = workflowName;
+		const correlationId = pathPrefixedCorrelationId.substring(colonIndex + 1);
+
+		const entry = PrivateWorkflowResponseRegistry.get(path);
 
 		if (!entry) {
 			this.logger?.warn?.(
-				`[RespondToPrivateWorkflow] No pending SignalR entry for correlation=${correlationId}`
+				`[RespondToPrivateWorkflow] No pending SignalR entry for path=${path}`
 			);
 			// still return items so workflow debugging isn't broken
 			return [items];
@@ -323,13 +347,13 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 					if (!binaryData || !binaryPropertyName) {
 						this.logger?.warn?.(
-							`[RespondToPrivateWorkflow] No binary data for correlation=${correlationId}`
+							`[RespondToPrivateWorkflow] No binary data for path=${path}`
 						);
 
 						payload = null;
 
 						outputItems.push({
-							json: { correlationId, status: 'Success' },
+							json: { correlationId: pathPrefixedCorrelationId, status: 'Success' },
 						});
 
 					} else {
@@ -337,7 +361,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 						payload = binaryData.data;
 
 						outputItems.push({
-							json: { correlationId, status: 'Success' },
+							json: { correlationId: pathPrefixedCorrelationId, status: 'Success' },
 							binary: {
 								[binaryPropertyName]: binaryData,
 							},
@@ -352,7 +376,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 					payload = null;
 					encoding = "json";
 						outputItems.push({
-							json: { correlationId, status: 'Success' },
+							json: { correlationId: pathPrefixedCorrelationId, status: 'Success' },
 						});
 					break;
 			}
@@ -487,7 +511,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			// Send a single response to the hub AFTER collecting payload
 			// ------------------------------------------------------------------------------------
 			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] Sending response → corr=${correlationId}, mode=${respondWith}`
+				`[RespondToPrivateWorkflow] Sending response → path=${path}, mode=${respondWith}`
 			);
 
 			await entry.client.sendResponseToHub(
@@ -500,10 +524,10 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 			// Cleanup once
 			clearTimeout(entry.timeout);
-			PrivateWorkflowResponseRegistry.delete(correlationId);
+			PrivateWorkflowResponseRegistry.delete(path);
 
 			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] Response sent & cleared (corr=${correlationId})`
+				`[RespondToPrivateWorkflow] Response sent & cleared (path=${path})`
 			);
 
 			// Return items to workflow

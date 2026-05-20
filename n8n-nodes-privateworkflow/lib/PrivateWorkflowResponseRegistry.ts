@@ -4,9 +4,13 @@
 // This module holds pending private workflow responses between the
 // ExecutePrivateWorkflowTrigger and the RespondToPrivateWorkflow node.
 //
-// Each entry maps a correlationId (UUID) to a live response context that
-// includes the SignalR client, requestId (from the hub), path, and any pending
-// Promise resolvers/rejecters for deferred responses.
+// Each entry is keyed by workflow path and contains a live response context that
+// includes the SignalR client, requestId (from the hub), correlationId, and any
+// pending Promise resolvers/rejecters for deferred responses.
+// 
+// Note: The correlationId is now emitted with a path prefix (path:correlationId)
+// for correlation tracking, but the registry uses path as the primary key since
+// each path has only one active workflow trigger.
 // -----------------------------------------------------------------------------
 
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
@@ -18,6 +22,7 @@ import type { SignalRPrivateWorkflowClient } from './SignalRPrivateWorkflowClien
 // -----------------------------------------------------------------------------
 export interface RegistryEntry {
 
+	/** The original correlationId from the hub */
 	correlationId: string;
 
 	/** Reference to the SignalR client used to send the eventual response */
@@ -43,7 +48,7 @@ export interface RegistryEntry {
 }
 
 // -----------------------------------------------------------------------------
-// Registry Storage
+// Registry Storage: keyed by path (since each path has a single active trigger)
 // -----------------------------------------------------------------------------
 const registry = new Map<string, RegistryEntry>();
 
@@ -52,33 +57,34 @@ const registry = new Map<string, RegistryEntry>();
 // -----------------------------------------------------------------------------
 
 /**
- * Registers a new entry for a given correlationId.
+ * Registers a new entry for a given path.
+ * Each path should have only one active entry; this replaces any existing entry for that path.
  */
-export function registerResponseEntry(correlationId: string, entry: RegistryEntry): void {
-	// Defensive cleanup if the same correlationId already exists
-	if (registry.has(correlationId)) {
-		const existing = registry.get(correlationId);
+export function registerResponseEntry(path: string, entry: RegistryEntry): void {
+	// Defensive cleanup if the same path already exists
+	if (registry.has(path)) {
+		const existing = registry.get(path);
 		if (existing?.timeout) clearTimeout(existing.timeout);
-		registry.delete(correlationId);
+		registry.delete(path);
 	}
 
-	registry.set(correlationId, entry);
+	registry.set(path, entry);
 }
 
 /**
- * Retrieves an entry for a given correlationId.
+ * Retrieves an entry for a given path.
  */
-export function getResponseEntry(correlationId: string): RegistryEntry | undefined {
-	return registry.get(correlationId);
+export function getResponseEntry(path: string): RegistryEntry | undefined {
+	return registry.get(path);
 }
 
 /**
- * Deletes an entry and clears its timeout if present.
+ * Deletes an entry by path and clears its timeout if present.
  */
-export function removeResponseEntry(correlationId: string): void {
-	const entry = registry.get(correlationId);
+export function removeResponseEntry(path: string): void {
+	const entry = registry.get(path);
 	if (entry?.timeout) clearTimeout(entry.timeout);
-	registry.delete(correlationId);
+	registry.delete(path);
 }
 
 /**
