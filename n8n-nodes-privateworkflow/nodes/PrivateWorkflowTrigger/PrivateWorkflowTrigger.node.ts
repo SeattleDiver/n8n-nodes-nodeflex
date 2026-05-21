@@ -409,20 +409,6 @@ export class PrivateWorkflowTrigger implements INodeType {
 					});
 
 					await client.start();
-					
-					// Add connection to pool (with defensive check to prevent race conditions)
-					const existingConnection = SignalRConnectionPool.get(hubPath);
-					if (!existingConnection) {
-						// Connection doesn't exist in pool yet, safe to store
-						SignalRConnectionPool.set(hubPath, client);
-						self.logger.info(`[PrivateWorkflowTrigger] Stored connection in pool for path=${hubPath}`);
-					} else {
-						// Connection already exists in pool, reuse it and stop the new one
-						self.logger.info(`[PrivateWorkflowTrigger] Connection already exists in pool for path=${hubPath}, reusing existing connection`);
-						await client.stop();
-						client = existingConnection;
-					}
-					
 					started = true;
 				};
 
