@@ -157,6 +157,11 @@ export class RespondToPrivateWorkflow implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const outputItems: INodeExecutionData[] = [];
+		SignalRConnectionPool.setLogger({
+			info: (m) => this.logger.info(m),
+			warn: (m) => this.logger.warn(m),
+			error: (m) => this.logger.error(m),
+		});
 
 		// Get the full correlation ID from the trigger output (format: "accountPath:workflowName:correlationId")
 		let fullCorrelationId = this.getNodeParameter('correlationId', 0) as string;
@@ -177,7 +182,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 		const correlationId = parts.slice(2).join(':'); // In case correlationId contains colons (UUID+suffix)
 
 		// Reconstruct path in the format used by the trigger: accountPath/workflowName
-		const path = `${accountPath}/${workflowName}`;
+		const path = `${accountPath}/${workflowName}`.toLowerCase();
 
 		const pendingRequest = SignalRConnectionPool.getPendingRequest(path);
 		const client = SignalRConnectionPool.get(path);
@@ -186,6 +191,12 @@ export class RespondToPrivateWorkflow implements INodeType {
 			this.logger?.warn?.(
 				`[RespondToPrivateWorkflow] No pending SignalR entry for path=${path}`
 			);
+
+			this.logger?.warn?.(
+				`[RespondToPrivateWorkflow] No pending SignalR entry for path=${path}`
+			);
+
+
 			// still return items so workflow debugging isn't broken
 			return [items];
 		}
@@ -533,7 +544,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			SignalRConnectionPool.clearPendingRequest(path);
 
 			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] Response sent & cleared (path=${path})`
+				`[RespondToPrivateWorkflow] Response sent (path=${path})`
 			);
 
 			// Return items to workflow

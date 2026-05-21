@@ -2,6 +2,12 @@
 import { clearTimeout } from 'node:timers';
 import type { SignalRPrivateWorkflowClient } from './SignalRPrivateWorkflowClient';
 
+interface ConnectionPoolLogger {
+	info: (msg: string) => void;
+	warn?: (msg: string) => void;
+	error?: (msg: string) => void;
+}
+
 // -----------------------------------------------------------------------------
 // Type: Pending Request Context
 // -----------------------------------------------------------------------------
@@ -30,6 +36,15 @@ interface PoolEntry {
 }
 
 const connectionPool = new Map<string, PoolEntry>();
+let logger: ConnectionPoolLogger | undefined;
+
+function logInfo(action: string, metadata: Record<string, unknown>): void {
+	logger?.info?.(`[SignalRConnectionPool] ${action} ${JSON.stringify(metadata)}`);
+}
+
+function logWarn(action: string, metadata: Record<string, unknown>): void {
+	logger?.warn?.(`[SignalRConnectionPool] ${action} ${JSON.stringify(metadata)}`);
+}
 
 // Helper: Normalize path to lowercase for consistent key lookups
 function normalizePathKey(path: string): string {
@@ -38,11 +53,28 @@ function normalizePathKey(path: string): string {
 
 // Public API
 
+export function getConnectionPool(): Map<string, PoolEntry> {
+	logInfo('getConnectionPool', { size: connectionPool.size });
+	return connectionPool;
+}
+
+/**
+ * Gets all connection pool entries as [path, entry] tuples.
+ */
+export function getConnectionPoolEntries(): [string, PoolEntry][] {
+	const entries = Array.from(connectionPool.entries());
+	logInfo('getConnectionPoolEntries: ', { count: entries.length });
+	return entries;
+}
+
 /**
  * Retrieves a connection for the given path, if it exists.
  */
 export function getConnection(path: string): SignalRPrivateWorkflowClient | undefined {
-	return connectionPool.get(normalizePathKey(path))?.client;
+	const key = normalizePathKey(path);
+	const entry = connectionPool.get(key);
+	logInfo('getConnection: ', { path: key, found: !!entry, size: connectionPool.size });
+	return entry?.client;
 }
 
 /**
@@ -55,13 +87,24 @@ export function setConnection(path: string, client: SignalRPrivateWorkflowClient
 		client,
 		pendingRequest: existing?.pendingRequest,
 	});
+	logInfo('setConnection', {
+		path: key,
+		replacedExisting: !!existing,
+		size: connectionPool.size,
+	});
 }
 
 /**
  * Removes a connection for the given path.
  */
 export function removeConnection(path: string): void {
-	connectionPool.delete(normalizePathKey(path));
+	const key = normalizePathKey(path);
+	const removed = connectionPool.delete(key);
+	logInfo('Delete entry', { path: key, removed, size: connectionPool.size });
+}
+
+export function setConnectionPoolLogger(poolLogger?: ConnectionPoolLogger): void {
+	logger = poolLogger;
 }
 
 /**
@@ -97,10 +140,13 @@ export function getActivePaths(): string[] {
 export function setPendingRequest(
 	path: string,
 	request: PendingRequestContext,
-): void {
+): boolean {
 	const key = normalizePathKey(path);
 	const entry = connectionPool.get(key);
-	if (!entry) return;
+	if (!entry) {
+		logWarn('setPendingRequest: Register pending request skipped (missing entry)', { path: key, size: connectionPool.size });
+		return false;
+	}
 
 	// Clear any existing timeout
 	if (entry.pendingRequest?.timeout) {
@@ -108,13 +154,18 @@ export function setPendingRequest(
 	}
 
 	entry.pendingRequest = request;
+	logInfo('setPendingRequest: Register pending request', { path: key, requestId: request.requestId });
+	return true;
 }
 
 /**
  * Retrieves the pending request for a given path, if any.
  */
 export function getPendingRequest(path: string): PendingRequestContext | undefined {
-	return connectionPool.get(normalizePathKey(path))?.pendingRequest;
+	const key = normalizePathKey(path);
+	const pendingRequest = connectionPool.get(key)?.pendingRequest;
+	logInfo('Retrieve pending request', { path: key, found: !!pendingRequest });
+	return pendingRequest;
 }
 
 /**
@@ -123,13 +174,17 @@ export function getPendingRequest(path: string): PendingRequestContext | undefin
 export function clearPendingRequest(path: string): void {
 	const key = normalizePathKey(path);
 	const entry = connectionPool.get(key);
-	if (!entry) return;
+	if (!entry) {
+		logWarn('clearPendingRequest: Clear pending request skipped (missing entry)', { path: key, size: connectionPool.size });
+		return;
+	}
 
 	if (entry.pendingRequest?.timeout) {
 		clearTimeout(entry.pendingRequest.timeout);
 	}
 
 	entry.pendingRequest = undefined;
+	logInfo('clearPendingRequest: Clear pending request', { path: key });
 }
 
 // Export as default object for convenience
@@ -140,7 +195,10 @@ export const SignalRConnectionPool = {
 	clearAll: clearAllConnections,
 	count: countConnections,
 	getPaths: getActivePaths,
+	getEntries: getConnectionPoolEntries,
+	setLogger: setConnectionPoolLogger,
 	setPendingRequest,
 	getPendingRequest,
 	clearPendingRequest,
+	getConnectionPool
 };

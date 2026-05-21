@@ -79,6 +79,11 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 			  // eslint-disable-next-line @typescript-eslint/no-this-alias
 			  const self = this;
+				SignalRConnectionPool.setLogger({
+					info: (m) => self.logger.info(m),
+					warn: (m) => self.logger.warn(m),
+					error: (m) => self.logger.error(m),
+				});
 				const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
 				const hubBase = HUB_BASE_URL;
 				const workflowName = this.getNodeParameter('workflowName', 0) as string;
@@ -345,16 +350,22 @@ export class PrivateWorkflowTrigger implements INodeType {
 												);
 											}, 120_000);
 
-											SignalRConnectionPool.setPendingRequest(hubPath, {
+											const registered = SignalRConnectionPool.setPendingRequest(hubPath, {
 												correlationId,
 												requestId,
 												timeout,
 												isManual: this.getMode && this.getMode() === 'manual',
 											});
 
-											self.logger?.info?.(
-												`[PrivateWorkflowTrigger] Registered path=${hubPath} for deferred response (requestId=${requestId})`
-											);
+											if (registered) {
+												self.logger?.info?.(
+													`[PrivateWorkflowTrigger] Registered path=${hubPath} for deferred response (requestId=${requestId})`
+												);
+											} else {
+												self.logger?.warn?.(
+													`[PrivateWorkflowTrigger] Failed to register deferred response path=${hubPath} (requestId=${requestId})`
+												);
+											}
 											return;
 										}
 
@@ -409,6 +420,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 					});
 
 					await client.start();
+					SignalRConnectionPool.set(hubPath, client);
 					started = true;
 				};
 
@@ -481,6 +493,8 @@ export class PrivateWorkflowTrigger implements INodeType {
 				const closeFunction = async function (this: ITriggerFunctions) {
 					try {
 						await client.stop();
+						SignalRConnectionPool.clearPendingRequest(hubPath);
+						SignalRConnectionPool.remove(hubPath);
 						started = false;
 						self.logger?.info('SignalR client stopped.');
 					} catch (e) {
@@ -529,10 +543,16 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 							// ✅ DO NOT sendResponseToHub here — onExecute already did it
 							await client.stop();
+							SignalRConnectionPool.clearPendingRequest(hubPath);
+							SignalRConnectionPool.remove(hubPath);
 							self.logger.info('[ManualMode] SignalR connection closed. ✅');
 						} catch (err) {
 							self.logger.warn(`[ManualMode] Timeout or error: ${err}`);
-							try { await client.stop(); } catch { /* stop error suppressed */ }
+							try {
+								await client.stop();
+								SignalRConnectionPool.clearPendingRequest(hubPath);
+								SignalRConnectionPool.remove(hubPath);
+							} catch { /* stop error suppressed */ }
 						}
 
 						return;
