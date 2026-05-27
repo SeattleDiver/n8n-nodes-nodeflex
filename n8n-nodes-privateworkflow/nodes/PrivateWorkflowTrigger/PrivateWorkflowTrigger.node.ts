@@ -10,7 +10,6 @@ import {
 } from 'n8n-workflow';
 
 import { SignalRPrivateWorkflowClient } from '../../lib/SignalRPrivateWorkflowClient'
-import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
 import { HubProfileService } from "../../lib/HubProfileService";
 import { HUB_BASE_URL } from "../../lib/HubConfig";
 import { IN8nHttpHelper } from "../../lib/N8nHttpHelper";
@@ -334,29 +333,8 @@ export class PrivateWorkflowTrigger implements INodeType {
 										// 2️⃣ RESPOND TO PRIVATE WORKFLOW
 										// ------------------------------------------------------------------------------------
 										case 'respondToPrivateWorkflow': {
-
-											// Create one output item
-											// this.emit([[outItem]]);
-
-											const entry = {
-												correlationId,
-												client,     // the live SignalRPrivateWorkflowClient
-												requestId,  // original hub RequestId
-												path: hubPath,
-												isManual: this.getMode && this.getMode() === 'manual',
-												timeout: setTimeout(() => {
-													PrivateWorkflowResponseRegistry.delete(correlationId);
-													self.logger?.warn?.(
-														`[PrivateWorkflowTrigger] Timeout waiting for response correlationId=${correlationId}`
-													);
-												}, 120_000),
-											};
-
-											// Register the pending response in the global registry
-											PrivateWorkflowResponseRegistry.register(correlationId, entry);
-
 											self.logger?.info?.(
-												`[PrivateWorkflowTrigger] Registered correlationId=${correlationId} for deferred response (requestId=${requestId})`
+												`[PrivateWorkflowTrigger] Deferred response mode active for correlationId=${correlationId} (requestId=${requestId})`
 											);
 											return;
 										}

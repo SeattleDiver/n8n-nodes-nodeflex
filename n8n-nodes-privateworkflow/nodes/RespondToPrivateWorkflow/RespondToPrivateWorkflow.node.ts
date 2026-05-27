@@ -7,7 +7,6 @@ import {
 	IDataObject,
 	NodeOperationError
 } from 'n8n-workflow';
-import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
 import { PrivateWorkflowPayload, PrivateWorkflowPayloadEncoding } from '../../lib/PrivateWorkflowPayload';
 import { PrivateWorkflowResponse } from '../../lib/PrivateWorkflowResponse';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
@@ -514,11 +513,8 @@ export class RespondToPrivateWorkflow implements INodeType {
 				json: true,
 			});
 
-			// Cleanup once
-			PrivateWorkflowResponseRegistry.delete(correlationId);
-
 			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] Response sent & cleared (corr=${correlationId})`
+				`[RespondToPrivateWorkflow] Response sent (corr=${correlationId})`
 			);
 
 			// Return items to workflow

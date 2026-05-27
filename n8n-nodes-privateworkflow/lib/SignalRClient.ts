@@ -325,8 +325,8 @@ export class HubConnection {
         const startTime = Date.now();
         let delay = 0; // first attempt is immediate
         let failedAttempts = 0;
-        const quickRetry4sCount = 3;
-        const quickRetry8sCount = 4;
+        const quickRetry4sCount = 8;
+        const quickRetry8sCount = 8;
 
         while (!this.isStopped) {
             if (delay > 0) {

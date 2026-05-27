@@ -142,7 +142,7 @@ This node runs on the remote workflow host and maintains a persistent SignalR We
 Sends a deferred response back to the calling workflow through the SignalR connection. Used when the trigger is set to "Using Respond Node" mode.
 
 - **Response types:** All items, first item, custom JSON, plain text, binary data, or no data
-- **Correlation tracking:** Uses the `__correlationId` from the trigger to route the response to the correct caller
+- **Correlation passthrough:** Uses the `__correlationId` from the trigger output to POST the response to the hub's completed endpoint
 - **Large response support:** Response payloads up to 64 KB are sent directly via SignalR. Responses larger than 64 KB (up to 10 MB) are automatically uploaded to blob storage on the hub for the calling workflow to retrieve.
 
 ### Get Private Workflow Result
