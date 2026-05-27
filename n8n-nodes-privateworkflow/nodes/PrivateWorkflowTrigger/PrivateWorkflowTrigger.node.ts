@@ -392,13 +392,24 @@ export class PrivateWorkflowTrigger implements INodeType {
 								throw new NodeOperationError(self.getNode(), error);
 							},
 
-							onConnectionLost: (err: unknown) => {
+							onConnectionLost: async (err: unknown) => {
 								if (isReconnecting) {
 									self.logger?.info?.('Connection lost again — reconnect already in progress, ignoring');
 									return;
 								}
 								isReconnecting = true;
 								self.logger?.warn?.(`Connection lost (all quick reconnects failed): ${String(err)}`);
+
+								// Stop the old client to clean up resources and event handlers
+								if (client) {
+									try {
+										await client.stop();
+										self.logger?.info?.('Old SignalR client stopped');
+									} catch (stopErr) {
+										self.logger?.warn?.(`Error stopping old SignalR client: ${(stopErr as Error)?.message ?? stopErr}`);
+									}
+								}
+
 								self.logger?.info?.('Resetting connection — will re-fetch hubInfo and reconnect...');
 								started = false;
 								startingPromise = null;
