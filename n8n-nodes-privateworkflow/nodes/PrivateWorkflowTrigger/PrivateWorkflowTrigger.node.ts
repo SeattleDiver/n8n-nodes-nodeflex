@@ -258,7 +258,9 @@ export class PrivateWorkflowTrigger implements INodeType {
 									// Emit correlation ID
 									const outItem: INodeExecutionData = {
 										json: {
-											__correlationId: hubPath.toLowerCase().replace("/", ":") + ":" + correlationId
+											__correlationId: correlationId,
+											//__requestId: requestId,
+											//__path: hubPath,
 										},
 									};
 									if (normalizedPayload.type === 'inline' && normalizedPayload.encoding === 'base64') {
@@ -339,33 +341,9 @@ export class PrivateWorkflowTrigger implements INodeType {
 										// 2️⃣ RESPOND TO PRIVATE WORKFLOW
 										// ------------------------------------------------------------------------------------
 										case 'respondToPrivateWorkflow': {
-
-											// Create one output item
-											// this.emit([[outItem]]);
-
-											const timeout = setTimeout(() => {
-												SignalRConnectionPool.clearPendingRequest(hubPath);
-												self.logger?.warn?.(
-													`[PrivateWorkflowTrigger] Timeout waiting for response path=${hubPath}`
-												);
-											}, 120_000);
-
-											const registered = SignalRConnectionPool.setPendingRequest(hubPath, {
-												correlationId,
-												requestId,
-												timeout,
-												isManual: this.getMode && this.getMode() === 'manual',
-											});
-
-											if (registered) {
-												self.logger?.info?.(
-													`[PrivateWorkflowTrigger] Registered path=${hubPath} for deferred response (requestId=${requestId})`
-												);
-											} else {
-												self.logger?.warn?.(
-													`[PrivateWorkflowTrigger] Failed to register deferred response path=${hubPath} (requestId=${requestId})`
-												);
-											}
+											self.logger?.info?.(
+												`[PrivateWorkflowTrigger] Deferred response context emitted (requestId=${requestId}, path=${hubPath})`
+											);
 											return;
 										}
 
@@ -493,7 +471,6 @@ export class PrivateWorkflowTrigger implements INodeType {
 				const closeFunction = async function (this: ITriggerFunctions) {
 					try {
 						await client.stop();
-						SignalRConnectionPool.clearPendingRequest(hubPath);
 						SignalRConnectionPool.remove(hubPath);
 						started = false;
 						self.logger?.info('SignalR client stopped.');
@@ -543,14 +520,12 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 							// ✅ DO NOT sendResponseToHub here — onExecute already did it
 							await client.stop();
-							SignalRConnectionPool.clearPendingRequest(hubPath);
 							SignalRConnectionPool.remove(hubPath);
 							self.logger.info('[ManualMode] SignalR connection closed. ✅');
 						} catch (err) {
 							self.logger.warn(`[ManualMode] Timeout or error: ${err}`);
 							try {
 								await client.stop();
-								SignalRConnectionPool.clearPendingRequest(hubPath);
 								SignalRConnectionPool.remove(hubPath);
 							} catch { /* stop error suppressed */ }
 						}

@@ -1,5 +1,3 @@
-// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-import { clearTimeout } from 'node:timers';
 import {
 	IExecuteFunctions,
 	INodeExecutionData,
@@ -8,16 +6,19 @@ import {
 	IDataObject,
 	NodeOperationError
 } from 'n8n-workflow';
-import { SignalRConnectionPool } from '../../lib/SignalRConnectionPool';
 import { PrivateWorkflowPayload, PrivateWorkflowPayloadEncoding } from '../../lib/PrivateWorkflowPayload';
+import { PrivateWorkflowResponse } from '../../lib/PrivateWorkflowResponse';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
 import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
+import { HubProfileService } from '../../lib/HubProfileService';
+import { HUB_BASE_URL } from '../../lib/HubConfig';
 
 export class RespondToPrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Respond to Private Workflow',
 		name: 'respondToPrivateWorkflow',
 		group: ['output'],
+		usableAsTool: true,
 		version: 1,
 		description: 'Sends a response back to the Private Workflow Trigger',
 		icon: 'file:icon.svg',
@@ -26,6 +27,12 @@ export class RespondToPrivateWorkflow implements INodeType {
 		},
 		inputs: ['main'],
 		outputs: ['main'],
+		credentials: [
+			{
+				name: 'privateWorkflowApi',
+				required: true,
+			},
+		],
 		properties: [
 			{
 				displayName: 'Respond With',
@@ -157,65 +164,40 @@ export class RespondToPrivateWorkflow implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const outputItems: INodeExecutionData[] = [];
-		SignalRConnectionPool.setLogger({
-			info: (m) => this.logger.info(m),
-			warn: (m) => this.logger.warn(m),
-			error: (m) => this.logger.error(m),
-		});
 
-		// Get the full correlation ID from the trigger output (format: "accountPath:workflowName:correlationId")
-		let fullCorrelationId = this.getNodeParameter('correlationId', 0) as string;
-		fullCorrelationId = fullCorrelationId.trim();
+		const creds = (await this.getCredentials('privateWorkflowApi')) as {
+			apiKey?: string;
+		} | null;
+		const apiKey = creds?.apiKey;
+		if (!apiKey) {
+			throw new NodeOperationError(this.getNode(), 'API key is missing. Add it in the node credentials.');
+		}
 
-		// Split on colons - should have 3 parts: accountPath, workflowName, correlationId
-		const parts = fullCorrelationId.split(':');
-		if (parts.length < 3) {
+		const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
+		const hubService = new HubProfileService(HUB_BASE_URL, http);
+		const hubInfo = await hubService.getHubInfo(apiKey);
+		if (!hubInfo.apiUrl) {
+			throw new NodeOperationError(this.getNode(), 'API URL is unavailable. Hub service is down.');
+		}
+
+		let correlationId = this.getNodeParameter('correlationId', 0) as string;
+		correlationId = correlationId.trim();
+		if (!correlationId) {
 			throw new NodeOperationError(
 				this.getNode(),
-				`Invalid correlation ID format. Expected "accountPath:workflowName:correlationId" but got: ${fullCorrelationId}`
+				'Correlation ID is required.',
 			);
 		}
+		const completedUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/completed/${encodeURIComponent(correlationId)}`;
 
-		// Join first two parts back together since they might contain additional colons
-		const accountPath = parts[0];
-		const workflowName = parts[1];
-		const correlationId = parts.slice(2).join(':'); // In case correlationId contains colons (UUID+suffix)
-
-		// Reconstruct path in the format used by the trigger: accountPath/workflowName
-		const path = `${accountPath}/${workflowName}`.toLowerCase();
-
-		const pendingRequest = SignalRConnectionPool.getPendingRequest(path);
-		const client = SignalRConnectionPool.get(path);
-
-		if (!pendingRequest || !client) {
-			this.logger?.warn?.(
-				`[RespondToPrivateWorkflow] No pending SignalR entry for path=${path}`
-			);
-
-			this.logger?.warn?.(
-				`[RespondToPrivateWorkflow] No pending SignalR entry for path=${path}`
-			);
-
-
-			// still return items so workflow debugging isn't broken
-			return [items];
-		}
-
-		// Reconstruct entry object from pool data
-		const entry = {
-			client,
-			correlationId: pendingRequest.correlationId,
-			requestId: pendingRequest.requestId,
-			path,
-			timeout: pendingRequest.timeout,
-			isManual: pendingRequest.isManual,
-		};
+		const firstItemJson = (items[0]?.json ?? {}) as Record<string, unknown>;
+		const requestId = typeof firstItemJson.__requestId === 'string' ? firstItemJson.__requestId.trim() : '';
+		const path = typeof firstItemJson.__path === 'string' ? firstItemJson.__path.trim() : '';
 
 		let encoding: PrivateWorkflowPayloadEncoding = "json";
 		const respondWith = this.getNodeParameter('respondWith', 0) as string;
 
-		try
-		{
+		try {
 			let payload: IDataObject | IDataObject[] | string | null | undefined;
 			switch (respondWith) {
 
@@ -410,6 +392,8 @@ export class RespondToPrivateWorkflow implements INodeType {
 				if (json && typeof json === 'object' && !Array.isArray(json)) {
 					const clean = { ...(json as IDataObject) };
 					delete (clean as Record<string, unknown>).__correlationId;
+					delete (clean as Record<string, unknown>).__requestId;
+					delete (clean as Record<string, unknown>).__path;
 					outputItems[i] = {
 						...item,
 						json: clean,
@@ -424,12 +408,16 @@ export class RespondToPrivateWorkflow implements INodeType {
 					if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
 						const clean = { ...(obj as IDataObject) };
 						delete (clean as Record<string, unknown>).__correlationId;
+						delete (clean as Record<string, unknown>).__requestId;
+						delete (clean as Record<string, unknown>).__path;
 						payload[i] = clean;
 					}
 				}
 			} else if (payload && typeof payload === 'object') {
 				const clean = { ...(payload as IDataObject) };
 				delete (clean as Record<string, unknown>).__correlationId;
+				delete (clean as Record<string, unknown>).__requestId;
+				delete (clean as Record<string, unknown>).__path;
 				payload = clean;
 			}
 
@@ -451,12 +439,10 @@ export class RespondToPrivateWorkflow implements INodeType {
 			// ------------------------------------------------------------------------------------
 			// Decide transport: inline vs reference (Respond node)
 			// ------------------------------------------------------------------------------------
-			const hubService = entry.client.getHubService();
-
 			const useReference =
-				hubService.useStorage &&
-				payloadLength > hubService.maxPayload &&
-				!!hubService.blobStorageUrl;
+				hubInfo.useStorage &&
+				payloadLength > hubInfo.maxPayload &&
+				!!hubInfo.blobStorageUrl;
 
 			// ------------------------------------------------------------------------------------
 			// Build canonical PrivateWorkflowPayload for hub
@@ -472,14 +458,9 @@ export class RespondToPrivateWorkflow implements INodeType {
 						: Buffer.from(serializedValue, 'utf8');
 
 				// Create the blob transport using hub service info
-				const apiKey = entry.client.getApiKey();
-				if (!apiKey)
-				{
-					throw new NodeOperationError(this.getNode(), 'API key is not available on Private Workflow Trigger');
-				}
 				const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
 				const blobTransport = new WorkflowPayloadBlobTransport({
-					baseUrl: hubService.blobStorageUrl,
+					baseUrl: hubInfo.blobStorageUrl,
 					apiKey,
 					http,
 				});
@@ -528,23 +509,35 @@ export class RespondToPrivateWorkflow implements INodeType {
 			// Send a single response to the hub AFTER collecting payload
 			// ------------------------------------------------------------------------------------
 			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] Sending response → path=${path}, mode=${respondWith}`
+				`[RespondToPrivateWorkflow] Sending response → correlationId=${correlationId}, mode=${respondWith}`
 			);
-
-			await entry.client.sendResponseToHub(
-				correlationId,
-				'Completed',
-				entry.requestId,
-				hubPayload,
-				entry.path
-			);
-
-			// Cleanup once
-			clearTimeout(entry.timeout);
-			SignalRConnectionPool.clearPendingRequest(path);
 
 			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] Response sent (path=${path})`
+				`[RespondToPrivateWorkflow] Response url ${completedUrl}`
+			);
+
+			const completedResponse: PrivateWorkflowResponse = {
+				correlationId,
+				status: 'Completed',
+				requestId,
+				path,
+				payload: hubPayload,
+			};
+
+			// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
+			await this.helpers.httpRequest({
+				method: 'POST',
+				url: completedUrl,
+				headers: {
+					'x-api-key': apiKey,
+					accept: 'application/json',
+				},
+				body: completedResponse,
+				json: true,
+			});
+
+			this.logger?.info?.(
+				`[RespondToPrivateWorkflow] Response sent (correlationId=${correlationId})`
 			);
 
 			// Return items to workflow
@@ -554,13 +547,33 @@ export class RespondToPrivateWorkflow implements INodeType {
 		{
 			// 1️⃣ Send failure to hub (best effort)
 			try {
-				await entry.client.sendResponseToHub(
-					entry.correlationId,
-					'Failed',
-					entry.requestId,
-					err,          // can be Error or payload
-					entry.path
-				);
+				const failureMessage = err instanceof Error ? err.message : String(err);
+				const failurePayload: PrivateWorkflowPayload = {
+					type: 'inline',
+					value: JSON.stringify({ error: failureMessage }),
+					encoding: 'json',
+					isEncrypted: false,
+					length: Buffer.byteLength(JSON.stringify({ error: failureMessage }), 'utf8'),
+				};
+				const failedResponse: PrivateWorkflowResponse = {
+					correlationId,
+					status: 'Failed',
+					requestId,
+					path,
+					payload: failurePayload,
+				};
+
+				// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
+				await this.helpers.httpRequest({
+					method: 'POST',
+					url: completedUrl,
+					headers: {
+						'x-api-key': apiKey,
+						accept: 'application/json',
+					},
+					body: failedResponse,
+					json: true,
+				});
 			}
 			catch (hubErr) {
 				// Never let hub failures mask the real error

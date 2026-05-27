@@ -139,11 +139,12 @@ This node runs on the remote workflow host and maintains a persistent SignalR We
 
 ### Respond to Private Workflow
 
-Sends a deferred response back to the calling workflow through the SignalR connection. Used when the trigger is set to "Using Respond Node" mode.
+Sends a deferred response back to the calling workflow via the hub completion API. Used when the trigger is set to "Using Respond Node" mode.
 
 - **Response types:** All items, first item, custom JSON, plain text, binary data, or no data
-- **Correlation tracking:** Uses the `__correlationId` from the trigger to route the response to the correct caller
-- **Large response support:** Response payloads up to 64 KB are sent directly via SignalR. Responses larger than 64 KB (up to 10 MB) are automatically uploaded to blob storage on the hub for the calling workflow to retrieve.
+- **Direct hub response:** Uses its own Private Workflow API credential to resolve hub info and send completion directly
+- **Context fields:** Requires `__correlationId` from Private Workflow Trigger output
+- **Large response support:** Response payloads up to 64 KB are sent inline via API. Responses larger than 64 KB (up to 10 MB) are automatically uploaded to blob storage on the hub and returned by reference.
 
 ### Get Private Workflow Result
 
@@ -185,7 +186,7 @@ Obtain your API key from [portal.nodeflex.io](https://portal.nodeflex.io).
 1. Add **Execute Private Workflow** with **Wait for Response** enabled
 2. In the target workflow, set the trigger response mode to **Using Respond Node**
 3. Add your processing nodes after the trigger
-4. End with **Respond to Private Workflow**, setting the correlation ID to `{{ $json.__correlationId }}`
+4. End with **Respond to Private Workflow**, setting the correlation ID to `{{ $json.__correlationId }}` and using **Private Workflow API** credentials on the Respond node
 
 ### Polling for results
 

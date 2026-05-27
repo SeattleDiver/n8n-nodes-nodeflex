@@ -41,6 +41,9 @@ export class HubConnection {
     private invocationId = 0;
     private pendingInvocations = new Map<string, { resolve: (val: any) => void; reject: (err: any) => void }>();
     private keepAliveInterval: any;
+    private serverTimeoutCheckInterval: any;
+    private lastMessageReceivedAt = 0;
+    private serverTimeoutMs = 60_000;
 
     private isStopped = true;
     private options: IHttpConnectionOptions;
@@ -252,6 +255,7 @@ export class HubConnection {
                 signal.addEventListener('abort', onAbort, { once: true });
 
                 ws.onopen = () => {
+                    this.lastMessageReceivedAt = Date.now();
                     ws.send(`{"protocol":"json","version":1}\x1e`);
                 };
 
@@ -280,6 +284,7 @@ export class HubConnection {
 
                 ws.onmessage = (event) => {
                     signal.removeEventListener('abort', onAbort);
+                    this.lastMessageReceivedAt = Date.now();
                     this.handleRawMessage(event, () => {
                         if (settled) return;
                         settled = true;
@@ -379,15 +384,35 @@ export class HubConnection {
 
     private startKeepAlive() {
         clearInterval(this.keepAliveInterval);
+        clearInterval(this.serverTimeoutCheckInterval);
         this.keepAliveInterval = setInterval(() => {
             if (this.socket?.readyState === WebSocket.OPEN) {
-                this.socket.send(`{"type":6}\x1e`);
+                try {
+                    this.socket.send(`{"type":6}\x1e`);
+                } catch {
+                    // Force socket closure so reconnect/close path runs consistently.
+                    try { this.socket?.close(); } catch { /* close error suppressed */ }
+                }
             }
         }, 15000);
+
+        this.serverTimeoutCheckInterval = setInterval(() => {
+            if (this.isStopped) return;
+            if (this.socket?.readyState !== WebSocket.OPEN) return;
+            const idleMs = Date.now() - this.lastMessageReceivedAt;
+            if (idleMs > this.serverTimeoutMs) {
+                try {
+                    this.socket.close();
+                } catch {
+                    // ignore close errors
+                }
+            }
+        }, 5000);
     }
 
     private cleanup() {
         clearInterval(this.keepAliveInterval);
+        clearInterval(this.serverTimeoutCheckInterval);
         for (const p of this.pendingInvocations.values()) {
             p.reject(new Error("Connection closed"));
         }
