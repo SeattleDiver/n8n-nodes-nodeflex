@@ -324,6 +324,9 @@ export class HubConnection {
 
         const startTime = Date.now();
         let delay = 0; // first attempt is immediate
+        let failedAttempts = 0;
+        const quickRetry4sCount = 3;
+        const quickRetry8sCount = 4;
 
         while (!this.isStopped) {
             if (delay > 0) {
@@ -339,13 +342,21 @@ export class HubConnection {
                 await this.connectInternal(true);
                 return; // success
             } catch {
+                failedAttempts++;
                 // Compute next delay based on which phase we're in
                 const elapsedAfterAttempt = Date.now() - startTime;
-                if (elapsedAfterAttempt < this.retryPhase1DurationMs) {
+                if (failedAttempts <= quickRetry4sCount) {
+                    delay = 4_000;
+                } else if (failedAttempts <= quickRetry4sCount + quickRetry8sCount) {
+                    delay = 8_000;
+                } else if (elapsedAfterAttempt < this.retryPhase1DurationMs) {
                     // Phase 1: exponential backoff capped at phase1CapMs
-                    delay = delay === 0
+                    delay = delay <= 8_000
                         ? this.retryInitialDelayMs
                         : Math.min(delay * 2, this.retryPhase1CapMs);
+                    if (delay < 8_000) {
+                        delay = 8_000;
+                    }
                 } else {
                     // Phase 2: fixed interval
                     delay = this.retryPhase2IntervalMs;

@@ -31,6 +31,7 @@ export class SignalRPrivateWorkflowClient {
 	private client!: SignalRClient; // wrapper
 	private readonly cfg: SignalRClientConfig;
 	private hubService: WorkflowHubService;
+	private isStopping = false;
 
 	private onceResolvers: Array<() => void> = [];
 
@@ -95,6 +96,7 @@ export class SignalRPrivateWorkflowClient {
 	// Start / Stop
 	// ------------------------------------------------------------------
 	public async start(): Promise<void> {
+		this.isStopping = false;
 
 		// Build wrapper + get underlying HubConnection
 		this.client = new SignalRClient(
@@ -139,6 +141,7 @@ export class SignalRPrivateWorkflowClient {
 	}
 
 	public async stop(): Promise<void> {
+		this.isStopping = true;
 		if (this.client) {
 			await this.client.stop();
 			this.log('info', 'SignalR connection stopped');
@@ -182,6 +185,10 @@ export class SignalRPrivateWorkflowClient {
 
 		// Closed (all reconnect attempts exhausted)
 		this.conn.onclose((err) => {
+			if (this.isStopping) {
+				this.log('info', 'Connection closed intentionally');
+				return;
+			}
 			this.log('warn', 'Connection closed permanently', err?.message);
 			this.cfg.onConnectionLost?.(err);
 		});

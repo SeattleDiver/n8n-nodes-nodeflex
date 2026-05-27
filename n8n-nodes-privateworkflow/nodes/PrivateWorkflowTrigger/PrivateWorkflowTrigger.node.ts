@@ -444,6 +444,9 @@ export class PrivateWorkflowTrigger implements INodeType {
 									// Production: two-phase retry loop
 									const retryStart = Date.now();
 									let delay = 0;
+									let failedAttempts = 0;
+									const quickRetry4sCount = 3;
+									const quickRetry8sCount = 4;
 									// eslint-disable-next-line @typescript-eslint/no-explicit-any
 									let lastError: any;
 
@@ -465,13 +468,21 @@ export class PrivateWorkflowTrigger implements INodeType {
 											return;
 										} catch (e: any) {
 											lastError = e;
+											failedAttempts++;
 
 											// Compute next delay based on phase
 											const elapsedNow = Date.now() - retryStart;
-											if (elapsedNow < RETRY_PHASE1_DURATION_MS) {
-												delay = delay === 0
+											if (failedAttempts <= quickRetry4sCount) {
+												delay = 4_000;
+											} else if (failedAttempts <= quickRetry4sCount + quickRetry8sCount) {
+												delay = 8_000;
+											} else if (elapsedNow < RETRY_PHASE1_DURATION_MS) {
+												delay = delay <= 8_000
 													? RETRY_INITIAL_DELAY_MS
 													: Math.min(delay * 2, RETRY_PHASE1_CAP_MS);
+												if (delay < 8_000) {
+													delay = 8_000;
+												}
 											} else {
 												delay = RETRY_PHASE2_INTERVAL_MS;
 											}
