@@ -6,7 +6,7 @@
 // 3. Robust connection resilience (Auto-reconnect, Negotiation, Keep-Alive)
 
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-import { setTimeout, clearTimeout, setInterval, clearInterval } from 'node:timers';
+// import { setTimeout, clearTimeout, setInterval, clearInterval } from 'node:timers';
 
 // -------------------------------------------------------------------------
 // 2. Microsoft SignalR Enums

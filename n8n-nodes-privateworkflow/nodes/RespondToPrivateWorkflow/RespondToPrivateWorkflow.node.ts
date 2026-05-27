@@ -1,5 +1,4 @@
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-import { clearTimeout } from 'node:timers';
 import {
 	IExecuteFunctions,
 	INodeExecutionData,
@@ -186,15 +185,6 @@ export class RespondToPrivateWorkflow implements INodeType {
 			throw new NodeOperationError(this.getNode(), 'Correlation ID is required.');
 		}
 		const completedUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/completed/${encodeURIComponent(correlationId)}`;
-		const entry = PrivateWorkflowResponseRegistry.get(correlationId);
-
-		if (!entry) {
-			this.logger?.warn?.(
-				`[RespondToPrivateWorkflow] No pending SignalR entry for correlation=${correlationId}`
-			);
-			// still return items so workflow debugging isn't broken
-			return [items];
-		}
 
 		let encoding: PrivateWorkflowPayloadEncoding = "json";
 		const respondWith = this.getNodeParameter('respondWith', 0) as string;
@@ -510,8 +500,6 @@ export class RespondToPrivateWorkflow implements INodeType {
 			const completedResponse: PrivateWorkflowResponse = {
 				correlationId,
 				status: 'Completed',
-				requestId: entry.requestId,
-				path: entry.path,
 				payload: hubPayload,
 			};
 			// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
@@ -527,7 +515,6 @@ export class RespondToPrivateWorkflow implements INodeType {
 			});
 
 			// Cleanup once
-			clearTimeout(entry.timeout);
 			PrivateWorkflowResponseRegistry.delete(correlationId);
 
 			this.logger?.info?.(
@@ -552,8 +539,6 @@ export class RespondToPrivateWorkflow implements INodeType {
 				const failedResponse: PrivateWorkflowResponse = {
 					correlationId,
 					status: 'Failed',
-					requestId: entry.requestId,
-					path: entry.path,
 					payload: failurePayload,
 				};
 				// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth

@@ -9,8 +9,6 @@
 // Promise resolvers/rejecters for deferred responses.
 // -----------------------------------------------------------------------------
 
-// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-import { clearTimeout } from 'node:timers';
 import type { SignalRPrivateWorkflowClient } from './SignalRPrivateWorkflowClient';
 
 // -----------------------------------------------------------------------------

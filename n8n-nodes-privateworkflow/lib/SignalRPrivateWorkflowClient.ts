@@ -384,8 +384,6 @@ export class SignalRPrivateWorkflowClient {
 			const response: PrivateWorkflowResponse = {
 				status,
 				correlationId,
-				requestId,
-				path,
 				payload,
 			};
 
