@@ -10,8 +10,11 @@ import {
 } from 'n8n-workflow';
 import { PrivateWorkflowResponseRegistry } from '../../lib/PrivateWorkflowResponseRegistry';
 import { PrivateWorkflowPayload, PrivateWorkflowPayloadEncoding } from '../../lib/PrivateWorkflowPayload';
+import { PrivateWorkflowResponse } from '../../lib/PrivateWorkflowResponse';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
 import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
+import { HubProfileService } from '../../lib/HubProfileService';
+import { HUB_BASE_URL } from '../../lib/HubConfig';
 
 export class RespondToPrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
@@ -26,6 +29,12 @@ export class RespondToPrivateWorkflow implements INodeType {
 		},
 		inputs: ['main'],
 		outputs: ['main'],
+		credentials: [
+			{
+				name: 'privateWorkflowApi',
+				required: true,
+			},
+		],
 		properties: [
 			{
 				displayName: 'Respond With',
@@ -157,9 +166,26 @@ export class RespondToPrivateWorkflow implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const outputItems: INodeExecutionData[] = [];
+		const creds = (await this.getCredentials('privateWorkflowApi')) as {
+			apiKey?: string;
+		} | null;
+		const apiKey = creds?.apiKey;
+		if (!apiKey) {
+			throw new NodeOperationError(this.getNode(), 'API key is missing. Add it in the node credentials.');
+		}
+		const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
+		const hubService = new HubProfileService(HUB_BASE_URL, http);
+		const hubInfo = await hubService.getHubInfo(apiKey);
+		if (!hubInfo.apiUrl) {
+			throw new NodeOperationError(this.getNode(), 'API URL is unavailable. Hub service is down.');
+		}
 
 	  let correlationId = this.getNodeParameter('correlationId', 0) as string;
 		correlationId = correlationId.trim();
+		if (!correlationId) {
+			throw new NodeOperationError(this.getNode(), 'Correlation ID is required.');
+		}
+		const completedUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/completed/${encodeURIComponent(correlationId)}`;
 		const entry = PrivateWorkflowResponseRegistry.get(correlationId);
 
 		if (!entry) {
@@ -410,12 +436,10 @@ export class RespondToPrivateWorkflow implements INodeType {
 			// ------------------------------------------------------------------------------------
 			// Decide transport: inline vs reference (Respond node)
 			// ------------------------------------------------------------------------------------
-			const hubService = entry.client.getHubService();
-
 			const useReference =
-				hubService.useStorage &&
-				payloadLength > hubService.maxPayload &&
-				!!hubService.blobStorageUrl;
+				hubInfo.useStorage &&
+				payloadLength > hubInfo.maxPayload &&
+				!!hubInfo.blobStorageUrl;
 
 			// ------------------------------------------------------------------------------------
 			// Build canonical PrivateWorkflowPayload for hub
@@ -431,14 +455,8 @@ export class RespondToPrivateWorkflow implements INodeType {
 						: Buffer.from(serializedValue, 'utf8');
 
 				// Create the blob transport using hub service info
-				const apiKey = entry.client.getApiKey();
-				if (!apiKey)
-				{
-					throw new NodeOperationError(this.getNode(), 'API key is not available on Private Workflow Trigger');
-				}
-				const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
 				const blobTransport = new WorkflowPayloadBlobTransport({
-					baseUrl: hubService.blobStorageUrl,
+					baseUrl: hubInfo.blobStorageUrl,
 					apiKey,
 					http,
 				});
@@ -489,14 +507,24 @@ export class RespondToPrivateWorkflow implements INodeType {
 			this.logger?.info?.(
 				`[RespondToPrivateWorkflow] Sending response → corr=${correlationId}, mode=${respondWith}`
 			);
-
-			await entry.client.sendResponseToHub(
+			const completedResponse: PrivateWorkflowResponse = {
 				correlationId,
-				'Completed',
-				entry.requestId,
-				hubPayload,
-				entry.path
-			);
+				status: 'Completed',
+				requestId: entry.requestId,
+				path: entry.path,
+				payload: hubPayload,
+			};
+			// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
+			await this.helpers.httpRequest({
+				method: 'POST',
+				url: completedUrl,
+				headers: {
+					'x-api-key': apiKey,
+					accept: 'application/json',
+				},
+				body: completedResponse,
+				json: true,
+			});
 
 			// Cleanup once
 			clearTimeout(entry.timeout);
@@ -513,13 +541,32 @@ export class RespondToPrivateWorkflow implements INodeType {
 		{
 			// 1️⃣ Send failure to hub (best effort)
 			try {
-				await entry.client.sendResponseToHub(
-					entry.correlationId,
-					'Failed',
-					entry.requestId,
-					err,          // can be Error or payload
-					entry.path
-				);
+				const failureMessage = err instanceof Error ? err.message : String(err);
+				const failurePayload: PrivateWorkflowPayload = {
+					type: 'inline',
+					value: JSON.stringify({ error: failureMessage }),
+					encoding: 'json',
+					isEncrypted: false,
+					length: Buffer.byteLength(JSON.stringify({ error: failureMessage }), 'utf8'),
+				};
+				const failedResponse: PrivateWorkflowResponse = {
+					correlationId,
+					status: 'Failed',
+					requestId: entry.requestId,
+					path: entry.path,
+					payload: failurePayload,
+				};
+				// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
+				await this.helpers.httpRequest({
+					method: 'POST',
+					url: completedUrl,
+					headers: {
+						'x-api-key': apiKey,
+						accept: 'application/json',
+					},
+					body: failedResponse,
+					json: true,
+				});
 			}
 			catch (hubErr) {
 				// Never let hub failures mask the real error
