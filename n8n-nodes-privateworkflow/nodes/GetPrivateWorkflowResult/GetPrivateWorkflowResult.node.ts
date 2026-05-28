@@ -43,7 +43,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 				description: 'Correlation ID returned from Execute Private Workflow',
 			},
 			{
-				displayName: 'Continue Workflow when private workflow status is',
+				displayName: 'Continue Workflow When Private Workflow Status Returns',
 				name: 'continueOn',
 				type: 'multiOptions',
 				default: ['Completed'],
