@@ -1,8 +1,9 @@
-# n8n-nodes-privateworkflow
+# NodeFlex
+### n8n-nodes-privateworkflow
 
 This is an n8n community node package. It lets you execute remote private workflows securely in your n8n workflows using [NodeFlex](https://nodeflex.io).
 
-NodeFlex Private Workflow enables real-time, bidirectional workflow execution across n8n instances through a SignalR-based hub. One workflow can trigger another remotely — passing JSON, text, or binary payloads — and optionally wait for a response.
+NodeFlex Private Workflow enables real-time, bidirectional workflow execution across n8n instances through a SignalR-based hub. One workflow can trigger another workflow that is running remotely — passing JSON, text, or binary payloads — and optionally wait for a response.
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/reference/license/) workflow automation platform.
 
@@ -74,26 +75,26 @@ For more details, see the [n8n community nodes installation guide](https://docs.
 
 ## How It Works
 
-NodeFlex Private Workflow connects n8n instances through a central SignalR-based hub. The communication flow works as follows:
+NodeFlex Private Workflows connects workflows on separate n8n instances, separate networks through a central hub which allows executing remote workflows from anywhere.  It is an alternative to separately configuring WebHooks and Http request nodes. The communication flow works as follows:
 
 ### API Key and message routing
 
-Every NodeFlex account is assigned an **API Key**, which you obtain from [portal.nodeflex.io](https://portal.nodeflex.io). The API Key identifies your account and scopes all communication — only workflows authenticated with the same account can exchange messages through the hub.
+Every NodeFlex account is assigned one or more **API Keys**, which you obtain from [portal.nodeflex.io](https://portal.nodeflex.io). Each API Key identifies your account and scopes all communication — only workflows with matching API Keys can exchange messages with each other through the hub.  Combined with a unique **Workflow Name**, (you can think of this combination as a "channel") you can create unique communication pairs used for workflow routing.
 
-Within an account, the **Workflow Name** is used to route messages between the calling workflow and the target workflow. The Workflow Name configured on the **Execute Private Workflow** node must exactly match the Workflow Name configured on the **Private Workflow Trigger** node. When the hub receives an execution request, it uses the Workflow Name to find the connected trigger that is listening under that same name and delivers the message to it.
+For each API Key, the **Workflow Name** is used to route messages between the calling workflow and the target workflow. The Workflow Name configured on the **Execute Private Workflow** node must exactly match the Workflow Name configured on the **Private Workflow Trigger** node. When the hub receives an execution request, it uses the Workflow Name to find the connected trigger that is listening under that same name and delivers the message to it.
 
-This means you can have multiple independent workflow pairs running under the same account — each pair is isolated by its unique Workflow Name. There is no limit to the number of Workflow Names you can create. Simply configure a different Workflow Name on each **Execute Private Workflow** and **Private Workflow Trigger** pair to route requests to different target workflows.
+This means you can have multiple independent workflow pairs running under the same account — each pair is isolated by its unique API Key + Workflow Name. There is no limit to the number of combinations of API Key + Workflow Names you can create. Simply configure a different Workflow Name on each **Execute Private Workflow** and **Private Workflow Trigger** pair to route requests to different target workflows.
 
 ### Sending a request
 
-1. The **Execute Private Workflow** node on the calling instance sends a payload to the NodeFlex hub.
-2. The hub routes the request to the target instance where the **Private Workflow Trigger** is connected.
+1. The **Execute Private Workflow** node is used on the calling workflow to send a payload to the NodeFlex hub to start a workflow.  This node is configured with an API Key + Workflow Name.
+2. The hub routes the request to the target instance where the **Private Workflow Trigger** is connected, if connected.
 3. The **Private Workflow Trigger** receives the request and starts the target workflow.
 
 ### Returning a response
 
-1. After the target workflow completes processing, the **Respond to Private Workflow** node sends the response back through the hub.
-2. On the calling side, the **Execute Private Workflow** node (if waiting) or the **Get Private Workflow Result** node (if polling) receives the response.
+1. After the target workflow completes processing, the **Respond to Private Workflow** node sends the response back the calling workflow via the hub.
+2. On the calling side, the **Execute Private Workflow** node (if waiting) or the **Get Private Workflow Result** node (if polling) receives the response and the result payload.
 
 ### Summary of payload responsibilities
 
@@ -123,23 +124,23 @@ This package contains four nodes that work together:
 Initiates a remote private workflow execution. Sends a JSON, text, or binary payload to the NodeFlex hub, which routes it to the target workflow via SignalR.
 
 - **Payload types:** JSON (from input or custom expression), or binary file
-- **Wait for response:** Optionally block until the remote workflow completes (1–15 second timeout). Only use this when the target workflow is known to complete quickly within the timeout window. For longer-running workflows, leave this disabled and use the **Get Private Workflow Result** node to poll for completion instead.
+- **Wait for response:** Optionally block until the remote workflow completes (1–15 second timeout).  Use this only when the target workflow is known to complete quickly within the timeout window. For longer-running workflows, leave this disabled and use the **Get Private Workflow Result** node to poll for completion instead.
 - **Dual output:** Returns an "Acknowledged" output immediately when the hub confirms the request. The "Completed" output is only used when **Wait for Response** is enabled, and returns the result once the remote workflow finishes.
 - **Large payload support:** Payloads up to 64 KB are sent directly via SignalR. Payloads larger than 64 KB (up to 10 MB) are automatically uploaded to blob storage on the hub for the target workflow to retrieve.
 
 ### Private Workflow Trigger
 
-This node runs on the remote workflow host and maintains a persistent SignalR WebSocket connection to the NodeFlex hub. When an **Execute Private Workflow** node on another n8n instance sends an execution request to the hub, the hub routes that request to this trigger, which starts the target workflow.
+This node runs on the remote workflow host and maintains a persistent connection to the NodeFlex hub (via SignalR). When an **Execute Private Workflow** node on another n8n instance sends an execution request to the hub, the hub routes that request to this trigger, which starts the target workflow.
 
 - **Response modes:**
   - *Immediately* — Sends an acknowledgment right away
   - *Using Respond Node* — Defers the response until a "Respond to Private Workflow" node executes
 - **Payload normalization:** If the incoming payload was uploaded to blob storage by the **Execute Private Workflow** node (payloads larger than 64 KB), this node automatically downloads the full payload before starting the workflow.
-- **Auto-reconnect:** Maintains connection with exponential backoff
+- **Auto-reconnect:** Maintains connection with exponential backoff.  This is useful for recovery when network outages occur.
 
 ### Respond to Private Workflow
 
-Sends a deferred response back to the calling workflow through the SignalR connection. Used when the trigger is set to "Using Respond Node" mode.
+Sends a completed workflow response along with a desired payload to the hub. This marks the workflow "Completed" on the hub so the payload can be retrieved by the **Get Private Workflow Result** node.  In normal workflow terms, this should be used when the trigger node response is set to Using '**Respond to Private Workflow**' Node.
 
 - **Response types:** All items, first item, custom JSON, plain text, binary data, or no data
 - **Correlation passthrough:** Uses the `__correlationId` from the trigger output to POST the response to the hub's completed endpoint

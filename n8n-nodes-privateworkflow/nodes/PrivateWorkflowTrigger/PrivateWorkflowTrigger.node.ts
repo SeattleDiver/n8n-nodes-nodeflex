@@ -1,5 +1,5 @@
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-import { setTimeout } from 'node:timers';
+import { setTimeout as setTimeoutPromise } from 'timers/promises';
 import {
 	ITriggerFunctions,
 	INodeType,
@@ -472,7 +472,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 									while (true) {
 										if (delay > 0) {
-											await new Promise<void>(r => setTimeout(r, delay));
+											await setTimeoutPromise(delay);
 										}
 
 										const elapsed = Date.now() - retryStart;

@@ -3,7 +3,7 @@
 // Updated to use the new zero-dependency SignalRClient engine.
 
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-import { setTimeout } from 'node:timers';
+import { setTimeout as setTimeoutPromise } from 'timers/promises';
 import { SignalRClient, HubConnection } from './SignalRClient';
 import { PrivateWorkflowAck } from './PrivateWorkflowAck';
 import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
@@ -82,12 +82,12 @@ export class SignalRPrivateWorkflowClient {
 			this.onceResolvers.push(finish);
 
 			if (timeoutMs > 0) {
-				setTimeout(() => {
+				void setTimeoutPromise(timeoutMs).then(() => {
 					if (!done) {
 						done = true;
 						reject(new Error(`Timed out waiting for next message after ${timeoutMs} ms`));
 					}
-				}, timeoutMs);
+				});
 			}
 		});
 	}
