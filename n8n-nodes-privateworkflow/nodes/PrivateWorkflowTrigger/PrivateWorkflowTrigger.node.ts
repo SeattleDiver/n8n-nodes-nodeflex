@@ -322,10 +322,10 @@ export class PrivateWorkflowTrigger implements INodeType {
 										// ------------------------------------------------------------------------------------------------
 										case 'immediately': {
 
-											self.logger?.info?.('[Trigger] Sending immediate response to hub...');
+											self.logger?.info?.('[PrivateWorkflowTrigger] Sending immediate response to hub...');
 
 											if (!hubInfo) {
-												self.logger?.error?.('[Trigger] hubInfo not available for immediate response');
+												self.logger?.error?.('[PrivateWorkflowTrigger] hubInfo not available for immediate response');
 												return;
 											}
 
@@ -367,9 +367,9 @@ export class PrivateWorkflowTrigger implements INodeType {
 													body: completedResponse,
 													json: true,
 												});
-												self.logger?.info?.('[Trigger] Immediate response sent via POST');
+												self.logger?.info?.('[PrivateWorkflowTrigger] Immediate response sent via POST');
 											} catch (err) {
-												self.logger?.warn?.(`[Trigger] Failed to send immediate response: ${err}`);
+												self.logger?.warn?.(`[PrivateWorkflowTrigger] Failed to send immediate response: ${err}`);
 											}
 
 											// ✅ Do NOT return an object — this tells n8n we are done
