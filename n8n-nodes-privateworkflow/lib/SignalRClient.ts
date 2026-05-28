@@ -126,21 +126,35 @@ export class HubConnection {
             invocationId: invId
         };
 
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
+        // Create abort controller for this specific invocation's timeout
+        const timeoutAbortController = new AbortController();
+
+        // Race between timeout and actual response
+        const timeoutPromise = setTimeoutPromise(30000, undefined, { signal: timeoutAbortController.signal })
+            .then(() => {
+                // Timeout fired - clean up and reject if still pending
                 if (this.pendingInvocations.has(invId)) {
                     this.pendingInvocations.delete(invId);
-                    reject(new Error(`Invocation '${methodName}' timed out.`));
+                    throw new Error(`Invocation '${methodName}' timed out.`);
                 }
-            }, 30000);
+            });
 
+        const responsePromise = new Promise<any>((resolve, reject) => {
             this.pendingInvocations.set(invId, {
-                resolve: (value) => { clearTimeout(timeout); resolve(value); },
-                reject: (err) => { clearTimeout(timeout); reject(err); }
+                resolve: (value) => {
+                    timeoutAbortController.abort(); // Cancel timeout on success
+                    resolve(value);
+                },
+                reject: (err) => {
+                    timeoutAbortController.abort(); // Cancel timeout on error
+                    reject(err);
+                }
             });
 
             this.socket?.send(JSON.stringify(packet) + "\x1e");
         });
+
+        return Promise.race([timeoutPromise, responsePromise]);
     }
 
     // Lifecycle
