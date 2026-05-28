@@ -6,7 +6,7 @@
 // 3. Robust connection resilience (Auto-reconnect, Negotiation, Keep-Alive)
 
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-// import { setTimeout, clearTimeout, setInterval, clearInterval } from 'node:timers';
+import { setTimeout as setTimeoutPromise } from 'timers/promises';
 
 // -------------------------------------------------------------------------
 // 2. Microsoft SignalR Enums
@@ -330,7 +330,7 @@ export class HubConnection {
 
         while (!this.isStopped) {
             if (delay > 0) {
-                await new Promise(r => setTimeout(r, delay));
+                await setTimeoutPromise(delay);
             }
 
             if (this.isStopped) return;
