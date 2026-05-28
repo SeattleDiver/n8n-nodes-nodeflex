@@ -222,7 +222,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 
 		// Debug logging
 		this.logger.info(
-			`[GetPrivateWorkflowResult] Routing Logic: status=${status}, shouldContinue=${shouldContinue}, continueOnCompleted=${continueOnCompleted}, continueOnRunning=${continueOnRunning}, continueOnPending=${continueOnPending}, continueOnQueued=${continueOnQueued}`
+			`[GetPrivateWorkflowResult] Routing Logic: status=${status} body.status=${body?.status}, shouldContinue=${shouldContinue}, continueOnCompleted=${continueOnCompleted}, continueOnRunning=${continueOnRunning}, continueOnPending=${continueOnPending}, continueOnQueued=${continueOnQueued}`
 		);
 
 		if (!shouldContinue && (status === 'Queued' || status === 'Running' || status === 'Pending')) {
