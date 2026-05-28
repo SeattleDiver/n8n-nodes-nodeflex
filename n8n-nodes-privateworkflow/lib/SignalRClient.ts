@@ -161,6 +161,7 @@ export class HubConnection {
     public onreconnecting(cb: (error?: Error) => void) { this.onReconnectingCallbacks.push(cb); }
     public onreconnected(cb: (id?: string) => void) { this.onReconnectedCallbacks.push(cb); }
     public onretryattempt(cb: (delayMs: number, elapsedMs: number) => void) { this.onRetryAttemptCallbacks.push(cb); }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     public _setReconnectDelays(_delays: number[]) { /* legacy no-op, use _setRetryBudget */ }
     public _setRetryBudget(cfg: {
         maxDurationMs?: number;
@@ -440,6 +441,7 @@ export class HubConnection {
         // Start keep-alive ping interval (fires every 15s)
         this.keepAliveAbortController = new AbortController();
         (async () => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             for await (const _ of this.createInterval(15000, this.keepAliveAbortController!.signal)) {
                 if (this.socket?.readyState === WebSocket.OPEN) {
                     try {
@@ -454,6 +456,7 @@ export class HubConnection {
         // Start server timeout check interval (fires every 5s)
         this.serverTimeoutCheckAbortController = new AbortController();
         (async () => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             for await (const _ of this.createInterval(5000, this.serverTimeoutCheckAbortController!.signal)) {
                 if (this.isStopped) return;
                 if (this.socket?.readyState !== WebSocket.OPEN) return;
