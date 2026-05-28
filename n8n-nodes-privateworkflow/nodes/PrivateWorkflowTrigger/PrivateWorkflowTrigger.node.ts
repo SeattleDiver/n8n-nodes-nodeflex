@@ -299,6 +299,11 @@ export class PrivateWorkflowTrigger implements INodeType {
 
 											self.logger?.info?.('[Trigger] Sending immediate response to hub...');
 
+											if (!hubInfo) {
+												self.logger?.error?.('[Trigger] hubInfo not available for immediate response');
+												return;
+											}
+
 											const ackPayload: PrivateWorkflowPayload = {
 												type: 'inline',
 												value: JSON.stringify({
@@ -315,15 +320,30 @@ export class PrivateWorkflowTrigger implements INodeType {
 												}).length,
 											};
 
-											void client.sendResponseToHub(
+											// Send Running response via POST to /completed/{correlationId}
+											const completedUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/completed/${encodeURIComponent(correlationId)}`;
+											const completedResponse = {
 												correlationId,
-												'Running',
-												requestId,
-												ackPayload,
-												hubPath,
-											).catch(err =>
-												self.logger?.warn?.(`[Trigger] sendResponseToHub error: ${err}`)
-											);
+												status: 'Running',
+												payload: ackPayload,
+											};
+
+											try {
+												// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
+												await self.helpers.httpRequest({
+													method: 'POST',
+													url: completedUrl,
+													headers: {
+														'x-api-key': apiKey,
+														accept: 'application/json',
+													},
+													body: completedResponse,
+													json: true,
+												});
+												self.logger?.info?.('[Trigger] Immediate response sent via POST');
+											} catch (err) {
+												self.logger?.warn?.(`[Trigger] Failed to send immediate response: ${err}`);
+											}
 
 											// ✅ Do NOT return an object — this tells n8n we are done
 											return;

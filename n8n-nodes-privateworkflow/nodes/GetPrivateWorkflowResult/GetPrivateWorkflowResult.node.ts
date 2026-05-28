@@ -42,6 +42,36 @@ export class GetPrivateWorkflowResult implements INodeType {
 				default: '',
 				description: 'Correlation ID returned from Execute Private Workflow',
 			},
+			{
+				displayName: 'Continue Workflow when private workflow status is',
+				name: 'continueOn',
+				type: 'multiOptions',
+				default: ['Completed'],
+				required: true,
+				description: 'Select which workflow statuses should emit to the Completed output and continue the workflow. Unselected statuses will emit to the Pending output.',
+				options: [
+					{
+						name: 'Completed',
+						value: 'Completed',
+						description: 'Workflow execution is complete',
+					},
+					{
+						name: 'Running',
+						value: 'Running',
+						description: 'Workflow is currently running',
+					},
+					{
+						name: 'Pending',
+						value: 'Pending',
+						description: 'Workflow is pending execution',
+					},
+					{
+						name: 'Queued',
+						value: 'Queued',
+						description: 'Workflow is queued for execution',
+					},
+				],
+			},
 		],
 	};
 
@@ -70,6 +100,12 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// ------------------------------------------------------------
 		let correlationId = this.getNodeParameter('correlationId', 0) as string;
 		correlationId = correlationId.trim();
+
+		const continueOn = this.getNodeParameter('continueOn', 0) as string[];
+		const continueOnCompleted = continueOn.includes('Completed');
+		const continueOnRunning = continueOn.includes('Running');
+		const continueOnPending = continueOn.includes('Pending');
+		const continueOnQueued = continueOn.includes('Queued');
 
 		// ------------------------------------------------------------
 		// Resolve execution hub via control plane
@@ -176,9 +212,16 @@ export class GetPrivateWorkflowResult implements INodeType {
 
 
 		// ------------------------------------------------------------
-		// Pending states
+		// Routing: check if status should continue or pend
 		// ------------------------------------------------------------
-		if (status === 'Queued' || status === 'Running' || status === 'Pending') {
+		const shouldContinue =
+			(status === 'Queued' && continueOnQueued) ||
+			(status === 'Running' && continueOnRunning) ||
+			(status === 'Pending' && continueOnPending) ||
+			(status === 'Completed' && continueOnCompleted);
+
+		if (!shouldContinue && (status === 'Queued' || status === 'Running' || status === 'Pending')) {
+			// Status is not selected to continue, emit to pending output
 			pending.push({
 				json: {
 					status,
@@ -188,10 +231,23 @@ export class GetPrivateWorkflowResult implements INodeType {
 			return [completed, pending];
 		}
 
+		// Status is selected to continue, or is Completed
+		// For non-completed statuses, emit minimal response
+		if (status !== 'Completed') {
+			completed.push({
+				json: {
+					status,
+					correlationId,
+				},
+			});
+			return [completed, pending];
+		}
+
+		// Status is Completed
 		// ------------------------------------------------------------
 		// Completed with NO payload
 		// ------------------------------------------------------------
-		if (status === 'Completed' && !payload) {
+		if (!payload) {
 			completed.push({
 				json: {
 					status,
@@ -204,7 +260,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		// ------------------------------------------------------------
 		// Completed WITH payload
 		// ------------------------------------------------------------
-		if (status === 'Completed' && normalizedPayload?.type === 'inline') {
+		if (normalizedPayload?.type === 'inline') {
 			// -------------------------
 			// JSON
 			// -------------------------
