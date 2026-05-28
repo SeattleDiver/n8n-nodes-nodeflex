@@ -226,6 +226,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 				json: {
 					status,
 					correlationId,
+					payload: normalizedPayload,
 				},
 			});
 			return [completed, pending];
@@ -238,6 +239,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 				json: {
 					status,
 					correlationId,
+					payload: normalizedPayload,
 				},
 			});
 			return [completed, pending];
@@ -252,6 +254,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 				json: {
 					status,
 					correlationId,
+					payload: null,
 				},
 			});
 			return [completed, pending];
@@ -268,7 +271,11 @@ export class GetPrivateWorkflowResult implements INodeType {
 				const parsed = JSON.parse(normalizedPayload.value);
 
 				completed.push({
-					json: parsed,
+					json: {
+						status,
+						correlationId,
+						payload: parsed,
+					},
 				});
 			}
 
@@ -278,7 +285,11 @@ export class GetPrivateWorkflowResult implements INodeType {
 			else if (normalizedPayload.encoding === 'text') {
 				completed.push({
 					json: {
-						text: normalizedPayload.value,
+						status,
+						correlationId,
+						payload: {
+							text: normalizedPayload.value,
+						},
 					},
 				});
 			}
@@ -293,6 +304,10 @@ export class GetPrivateWorkflowResult implements INodeType {
 					json: {
 						status,
 						correlationId,
+						payload: {
+							encoding: 'base64',
+							length: normalizedPayload.length,
+						},
 					},
 					binary: {
 						file: {
