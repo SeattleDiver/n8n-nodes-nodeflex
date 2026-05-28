@@ -329,20 +329,17 @@ export class PrivateWorkflowTrigger implements INodeType {
 												return;
 											}
 
+											var payloadValue = JSON.stringify({
+												correlationId: correlationId,
+												path: hubPath,
+												status: "Running"
+											});
 											const ackPayload: PrivateWorkflowPayload = {
 												type: 'inline',
-												value: JSON.stringify({
-													ok: true,
-													mode: respondMode,
-													receivedAt: new Date().toISOString(),
-												}),
+												value: payloadValue,
 												encoding: 'json',
 												isEncrypted: false,
-												length: JSON.stringify({
-													ok: true,
-													mode: respondMode,
-													receivedAt: new Date().toISOString(),
-												}).length,
+												length: payloadValue.length,
 											};
 
 											// Send status to hub based on user configuration
