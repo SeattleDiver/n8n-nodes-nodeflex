@@ -320,11 +320,12 @@ export class PrivateWorkflowTrigger implements INodeType {
 												}).length,
 											};
 
-											// Send Running response via POST to /completed/{correlationId}
+											// Send "Completed" status to hub (request accepted, workflow running independently)
+											// This allows hub to clear the redis cache immediately without waiting for timeout
 											const completedUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/completed/${encodeURIComponent(correlationId)}`;
 											const completedResponse = {
 												correlationId,
-												status: 'Running',
+												status: 'Completed',
 												payload: ackPayload,
 											};
 
