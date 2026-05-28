@@ -40,8 +40,8 @@ export class HubConnection {
     private listeners = new Map<string, Array<(...args: any[]) => void>>();
     private invocationId = 0;
     private pendingInvocations = new Map<string, { resolve: (val: any) => void; reject: (err: any) => void }>();
-    private keepAliveInterval: any;
-    private serverTimeoutCheckInterval: any;
+    private keepAliveAbortController: AbortController | null = null;
+    private serverTimeoutCheckAbortController: AbortController | null = null;
     private lastMessageReceivedAt = 0;
     private serverTimeoutMs = 60_000;
 
@@ -182,11 +182,8 @@ export class HubConnection {
     // ---------------------------------------------------------------------
 
     private async connectInternal(isReconnect = false): Promise<void> {
-        const abortController = new AbortController();
-        const { signal } = abortController;
-
-        // Single deadline covering negotiate + WebSocket handshake
-        const timeout = setTimeout(() => abortController.abort(), this.connectTimeoutMs);
+        // Use AbortSignal.timeout() for clean deadline management (available in Node 17.3+)
+        const signal = AbortSignal.timeout(this.connectTimeoutMs);
 
         try {
             let finalUrl = this.baseUrl;
@@ -324,8 +321,6 @@ export class HubConnection {
                 throw new Error(`Connect timed out after ${this.connectTimeoutMs}ms`);
             }
             throw err;
-        } finally {
-            clearTimeout(timeout);
         }
     }
 
@@ -417,37 +412,72 @@ export class HubConnection {
         }
     }
 
+    /**
+     * Helper: Create an async interval generator using AbortSignal
+     * Yields at regular intervals until signal is aborted
+     */
+    private async *createInterval(ms: number, signal: AbortSignal) {
+        while (!signal.aborted) {
+            yield;
+            try {
+                await setTimeoutPromise(ms, undefined, { signal });
+            } catch (e: any) {
+                if (e.name === 'AbortError') break;
+                throw e;
+            }
+        }
+    }
+
     private startKeepAlive() {
-        clearInterval(this.keepAliveInterval);
-        clearInterval(this.serverTimeoutCheckInterval);
-        this.keepAliveInterval = setInterval(() => {
-            if (this.socket?.readyState === WebSocket.OPEN) {
-                try {
-                    this.socket.send(`{"type":6}\x1e`);
-                } catch {
-                    try { this.socket?.close(); } catch { /* close error suppressed */ }
+        // Stop previous intervals if they exist
+        if (this.keepAliveAbortController) {
+            this.keepAliveAbortController.abort();
+        }
+        if (this.serverTimeoutCheckAbortController) {
+            this.serverTimeoutCheckAbortController.abort();
+        }
+
+        // Start keep-alive ping interval (fires every 15s)
+        this.keepAliveAbortController = new AbortController();
+        (async () => {
+            for await (const _ of this.createInterval(15000, this.keepAliveAbortController!.signal)) {
+                if (this.socket?.readyState === WebSocket.OPEN) {
+                    try {
+                        this.socket.send(`{"type":6}\x1e`);
+                    } catch {
+                        try { this.socket?.close(); } catch { /* close error suppressed */ }
+                    }
                 }
             }
-        }, 15000);
+        })();
 
-        this.serverTimeoutCheckInterval = setInterval(() => {
-            if (this.isStopped) return;
-            if (this.socket?.readyState !== WebSocket.OPEN) return;
+        // Start server timeout check interval (fires every 5s)
+        this.serverTimeoutCheckAbortController = new AbortController();
+        (async () => {
+            for await (const _ of this.createInterval(5000, this.serverTimeoutCheckAbortController!.signal)) {
+                if (this.isStopped) return;
+                if (this.socket?.readyState !== WebSocket.OPEN) return;
 
-            const idleMs = Date.now() - this.lastMessageReceivedAt;
-            if (idleMs > this.serverTimeoutMs) {
-                try {
-                    this.socket.close();
-                } catch {
-                    // close errors are ignored; reconnect path is handled by onclose.
+                const idleMs = Date.now() - this.lastMessageReceivedAt;
+                if (idleMs > this.serverTimeoutMs) {
+                    try {
+                        this.socket.close();
+                    } catch {
+                        // close errors are ignored; reconnect path is handled by onclose.
+                    }
                 }
             }
-        }, 5000);
+        })();
     }
 
     private cleanup() {
-        clearInterval(this.keepAliveInterval);
-        clearInterval(this.serverTimeoutCheckInterval);
+        // Abort both interval generators
+        if (this.keepAliveAbortController) {
+            this.keepAliveAbortController.abort();
+        }
+        if (this.serverTimeoutCheckAbortController) {
+            this.serverTimeoutCheckAbortController.abort();
+        }
         for (const p of this.pendingInvocations.values()) {
             p.reject(new Error("Connection closed"));
         }
