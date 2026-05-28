@@ -68,6 +68,30 @@ export class PrivateWorkflowTrigger implements INodeType {
 						},
 					],
 				},
+				{
+					displayName: 'Respond With Status',
+					name: 'immediateResponseStatus',
+					type: 'options',
+					default: 'Completed',
+					description: 'Status to send when using immediate response mode. "Completed" means request accepted and workflow running independently.',
+					displayOptions: {
+						show: {
+							respond: ['immediately'],
+						},
+					},
+					options: [
+						{
+							name: 'Completed',
+							value: 'Completed',
+							description: 'Request accepted, workflow running independently (clears hub cache immediately)',
+						},
+						{
+							name: 'Running',
+							value: 'Running',
+							description: 'Workflow is running (hub cache expires at timeout)',
+						},
+					],
+				},
 			],
 		};
 
@@ -180,8 +204,9 @@ export class PrivateWorkflowTrigger implements INodeType {
 									const requestId = request?.requestId ?? 'unknown';
 
 									let respondMode = this.getNodeParameter('respond', 0) as string;
+									const immediateResponseStatus = this.getNodeParameter('immediateResponseStatus', 0) as string ?? 'Completed';
 									const isManual = (this.getMode && this.getMode() === 'manual');
-									this.logger.info(`respondMode: ${respondMode}, isManual: ${isManual}`);
+									this.logger.info(`respondMode: ${respondMode}, immediateResponseStatus: ${immediateResponseStatus}, isManual: ${isManual}`);
 
 									// Override respond mode for manual triggers
 									if (isManual && respondMode !== 'immediately') {
@@ -320,12 +345,13 @@ export class PrivateWorkflowTrigger implements INodeType {
 												}).length,
 											};
 
-											// Send "Completed" status to hub (request accepted, workflow running independently)
-											// This allows hub to clear the redis cache immediately without waiting for timeout
+											// Send status to hub based on user configuration
+											// "Completed": request accepted, workflow running independently (clears hub cache immediately)
+											// "Running": workflow is running (hub cache expires at timeout)
 											const completedUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/completed/${encodeURIComponent(correlationId)}`;
 											const completedResponse = {
 												correlationId,
-												status: 'Completed',
+												status: immediateResponseStatus,
 												payload: ackPayload,
 											};
 
