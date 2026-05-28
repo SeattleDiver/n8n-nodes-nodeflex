@@ -364,8 +364,7 @@ export class SignalRPrivateWorkflowClient {
 		correlationId: string,
 		status: string,
 		requestId: string,
-		payload: PrivateWorkflowPayload,
-		path: string
+		payload: PrivateWorkflowPayload
 	): Promise<void> {
 
 		if (!this.conn) {

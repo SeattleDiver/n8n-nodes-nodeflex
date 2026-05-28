@@ -26,6 +26,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 		group: ['transform'],
 		version: 1,
 		description: 'Run a remote private workflow',
+		usableAsTool: true,
 		defaults: {
 			name: 'Execute Private Workflow',
 		},

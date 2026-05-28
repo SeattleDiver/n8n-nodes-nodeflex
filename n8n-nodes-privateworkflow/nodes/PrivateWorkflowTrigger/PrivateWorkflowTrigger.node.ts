@@ -240,7 +240,6 @@ export class PrivateWorkflowTrigger implements INodeType {
 											throw new NodeOperationError(this.getNode(), 'Reference payload missing value/url');
 										}
 
-										// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
 										const refResponse = await self.helpers.httpRequest({
 											method: 'GET',
 											url: referenceUrl,
@@ -329,7 +328,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 												return;
 											}
 
-											var payloadValue = JSON.stringify({
+											const payloadValue = JSON.stringify({
 												correlationId: correlationId,
 												path: hubPath,
 												status: "Running"
@@ -353,7 +352,6 @@ export class PrivateWorkflowTrigger implements INodeType {
 											};
 
 											try {
-												// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
 												await self.helpers.httpRequest({
 													method: 'POST',
 													url: completedUrl,
@@ -488,7 +486,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 											await connectToHub();
 											self.logger.info('SignalR connection established (ensureStarted)');
 											return;
-										} catch (e: any) {
+										} catch (e) {
 											lastError = e;
 											failedAttempts++;
 
@@ -574,9 +572,9 @@ export class PrivateWorkflowTrigger implements INodeType {
 							const resolver = (client as any).onceResolvers?.shift?.();
 							if (resolver) resolver();
 
-							// ✅ DO NOT sendResponseToHub here — onExecute already did it
+							// DO NOT sendResponseToHub here — onExecute already did it
 							await client.stop();
-							self.logger.info('[ManualMode] SignalR connection closed. ✅');
+							self.logger.info('[ManualMode] SignalR connection closed.');
 						} catch (err) {
 							self.logger.warn(`[ManualMode] Timeout or error: ${err}`);
 							try { await client.stop(); } catch { /* stop error suppressed */ }

@@ -1,4 +1,3 @@
-// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
 import {
 	IExecuteFunctions,
 	INodeExecutionData,
@@ -21,6 +20,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 		group: ['output'],
 		version: 1,
 		description: 'Sends a response back to the Private Workflow Trigger',
+		usableAsTool: true,
 		icon: 'file:icon.svg',
 		defaults: {
 			name: 'Respond to Private Workflow'

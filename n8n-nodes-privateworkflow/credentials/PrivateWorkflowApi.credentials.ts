@@ -9,7 +9,7 @@ import { HUB_VERIFY_URL } from '../lib/HubConfig';
 
 export class PrivateWorkflowApi implements ICredentialType {
 	name = 'privateWorkflowApi';
-	displayName = 'Private Workflow Credentials';
+	displayName = 'Private Workflow Credentials API';
 	icon = 'fa:key' as const;
 	documentationUrl = 'https://github.com/SeattleDiver/nodeflex-workflow';
 	description = `Authentication credentials for executing a NodeFlex Private Workflow.
