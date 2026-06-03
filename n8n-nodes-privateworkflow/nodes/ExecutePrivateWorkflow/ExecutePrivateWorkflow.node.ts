@@ -130,32 +130,19 @@ export class ExecutePrivateWorkflow implements INodeType {
 				},
 			},
 			{
-				displayName: 'JSON',
-				name: 'jsonText',
-				type: 'string',
-				default: '',
-				placeholder: '{ "foo": "bar" }',
-				description: 'JSON object or expression that evaluates to an object',
-				displayOptions: {
-					show: {
-						payloadType: ['json'],
-						jsonSource: ['custom'],
+					displayName: 'JSON',
+					name: 'jsonText',
+					type: 'string',
+					default: '',
+					placeholder: '{ "foo": "bar" }',
+					description: 'JSON object or expression that evaluates to an object',
+					displayOptions: {
+						show: {
+							payloadType: ['json'],
+							jsonSource: ['custom'],
+						},
 					},
 				},
-			},
-			{
-				displayName: 'JSON',
-				name: 'jsonValue',
-				type: 'json',
-				default: {},
-				description: 'JSON object or expression that evaluates to an object',
-				displayOptions: {
-					show: {
-						payloadType: ['json'],
-						jsonSource: ['custom'],
-					},
-				},
-			},
 			{
 				displayName: 'Wait for Response',
 				name: 'waitForResponse',
@@ -478,8 +465,10 @@ export class ExecutePrivateWorkflow implements INodeType {
 				// Completed output when waiting and workflow completed
 				if (body?.status) {
 					if (waitForResponse && body.status === 'Completed') {
-						const result = PrivateWorkflowResponseHydrator.hydrate(body, {
-							binaryPropertyName: 'file', // you can wire this to a node param later if desired
+						const result = await PrivateWorkflowResponseHydrator.hydrate(body, {
+							binaryPropertyName: 'file',
+							http,
+							apiKey,
 						});
 
 						if (result.state === 'completed') {

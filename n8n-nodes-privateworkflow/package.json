@@ -2,15 +2,15 @@
   "name": "@nodeflex/n8n-nodes-privateworkflow",
   "version": "0.1.0",
   "description": "Execute Private Workflow",
-  "keywords": ["n8n-community-node-package"],
+  "keywords": ["n8n-community-node-package", "nodeflex", "private workflow", "signalr"],
   "license": "MIT",
-  "homepage": "https://github.com/seattlediver/n8n-cloudworkflow#readme",
+  "homepage": "https://github.com/NodeFlexIO/n8n-nodes-privateworkflow#readme",
   "author": { "name": "J. Robert Tryon, Jr.", "email": "bobtryon@nodeflex.io" },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/seattlediver/n8n-cloudworkflow.git"
+    "url": "git+https://github.com/NodeFlexIO/n8n-nodes-privateworkflow.git"
   },
-  "bugs": { "url": "https://github.com/seattlediver/n8n-cloudworkflow/issues" },
+  "bugs": { "url": "https://github.com/NodeFlexIO/n8n-nodes-privateworkflow/issues" },
   "engines": { "node": ">=20.15" },
   "main": "index.js",
   "scripts": {

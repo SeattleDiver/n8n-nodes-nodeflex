@@ -1,0 +1,148 @@
+# NodeFlex n8n-nodes-privateworkflow — Copilot Instructions
+
+## Commands
+
+```bash
+# from n8n-nodes-privateworkflow/
+npm run build        # compile TypeScript → dist/
+npm run build:watch  # tsc --watch (incremental, no linting)
+npm run dev          # n8n-node dev (hot-reload during development)
+npm run lint         # eslint via @n8n/node-cli (must pass before publish)
+npm run lintfix      # lint --fix (auto-corrects fixable issues)
+npm run format       # prettier on nodes/ and credentials/
+```
+
+There is no test suite. The build output goes to `dist/` (listed in `package.json` `"files"`). Only `dist/` is published to npm.
+
+Publishing is done via GitHub Actions (`publish.yml`) triggered by a version tag (e.g., `0.2.0`). The workflow runs `npm run build`, `npm run lint`, then `npm publish --provenance --access public`.
+
+---
+
+## Architecture
+
+This package provides **four n8n nodes** that work together to execute workflows across separate n8n instances via a central SignalR hub (hosted at `https://hub.nodeflex.io`):
+
+| Node | Class | n8n Interface |
+|------|-------|---------------|
+| Execute Private Workflow | `ExecutePrivateWorkflow` | `INodeType` (regular node) |
+| Private Workflow Trigger | `PrivateWorkflowTrigger` | `INodeType` (trigger node) |
+| Respond to Private Workflow | `RespondToPrivateWorkflow` | `INodeType` (regular node) |
+| Get Private Workflow Result | `GetPrivateWorkflowResult` | `INodeType` (regular node) |
+
+```
+n8n Instance A                    NodeFlex Hub                  n8n Instance B
+ExecutePrivateWorkflow  ──POST──▶  /api/{account}/{name}  ──SignalR──▶  PrivateWorkflowTrigger
+                        ◀──ACK──   (correlationId)                       │
+GetPrivateWorkflowResult ◀─poll─  /api/result/{correlationId}  ◀─POST──  RespondToPrivateWorkflow
+```
+
+### `lib/` — Shared services
+
+All business logic lives in `lib/`. These classes are **not** listed in `tsconfig.json`'s `include` but are compiled transitively (nodes import them).
+
+| File | Purpose |
+|------|---------|
+| `HubConfig.ts` | Single source of truth for `HUB_BASE_URL` and `HUB_VERIFY_URL` |
+| `HubProfileService.ts` | Fetches hub routing info (`WorkflowHubService`) from `/api/apikeys/hub` |
+| `WorkflowHubService.ts` | Typed shape returned by `HubProfileService.getHubInfo()` |
+| `SignalRClient.ts` | Zero-dependency custom SignalR WebSocket client |
+| `SignalRPrivateWorkflowClient.ts` | Wraps `SignalRClient`; handles register/ACK/execute/respond hub messages |
+| `PrivateWorkflowHttpClient.ts` | Thin HTTP POST wrapper (used by `ExecutePrivateWorkflow`) |
+| `WorkflowPayloadBlobTransport.ts` | Upload/download payloads to blob storage (payloads 64 KB – 10 MB) |
+| `PrivateWorkflowResponseHydrator.ts` | Decodes hub responses into `INodeExecutionData[]` |
+| `PrivateWorkflowPayload.ts` | Discriminated union type for all payload transport |
+| `N8nHttpHelper.ts` | `IN8nHttpHelper` interface — how lib classes accept HTTP without coupling to n8n context |
+
+---
+
+## Key Conventions
+
+### `IN8nHttpHelper` — loose coupling to n8n runtime
+
+Lib classes never accept `IExecuteFunctions` or `ITriggerFunctions` directly. They receive `IN8nHttpHelper`:
+
+```typescript
+// In a node file:
+const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
+const hubService = new HubProfileService(hubBase, http);
+```
+
+This keeps `lib/` classes independently testable and decoupled from the n8n execution context.
+
+### `HubConfig.ts` — environment flag
+
+`HUB_BASE_URL` in `lib/HubConfig.ts` is currently set to `https://localhost:7093` for local development against a self-hosted hub. Before releasing, switch it to the production URL:
+
+```typescript
+// Development (current)
+export const HUB_BASE_URL = 'https://localhost:7093';
+
+// Production (uncomment before publishing)
+// export const HUB_BASE_URL = 'https://hub.nodeflex.io';
+```
+
+The `HubProfileService` also has `skipSslCertificateValidation: false` — leave it `false` in production.
+
+### `PrivateWorkflowPayload` — discriminated union
+
+All payloads between nodes and the hub use this shape. The `type` field drives transport; `encoding` drives deserialization:
+
+```typescript
+type PrivateWorkflowPayloadType = 'inline' | 'reference';
+type PrivateWorkflowPayloadEncoding = 'json' | 'base64' | 'text';
+
+interface PrivateWorkflowPayload {
+  type: PrivateWorkflowPayloadType;  // 'inline' = value is the payload; 'reference' = value is a URL
+  value: string;
+  length: number;
+  isEncrypted: boolean;
+  encoding: PrivateWorkflowPayloadEncoding;
+}
+```
+
+Payloads ≤ 64 KB → `inline` transport via SignalR.  
+Payloads 64 KB – 10 MB → `reference` transport via `WorkflowPayloadBlobTransport`.
+
+### Hub profile is fetched per-execution
+
+`ExecutePrivateWorkflow` calls `HubProfileService.getHubInfo(apiKey)` on every execution to retrieve the current hub routing URLs (`hubUrl`, `apiUrl`, `blobStorageUrl`, `accountPath`, tier limits, etc.). This means hub configuration is dynamic — never cache the hub URL across executions.
+
+### Correlation ID flow
+
+`__correlationId` is injected into the trigger output JSON and must be passed through to `RespondToPrivateWorkflow` via expression `{{ $json.__correlationId }}`. The `GetPrivateWorkflowResult` node polls using the `correlationId` from the `ExecutePrivateWorkflow` "Acknowledged" output.
+
+### Trigger reconnect strategy
+
+`PrivateWorkflowTrigger` uses a two-tier reconnect loop:
+1. **`SignalRClient` / `HubConnection`** handles brief network blips with a 5-minute retry budget and exponential backoff.
+2. **Trigger-level loop** catches `onConnectionLost` events, re-fetches `HubProfileService.getHubInfo()`, and restarts the full `SignalRPrivateWorkflowClient` with an 8-hour budget.
+
+After every reconnect, `RegisterPrivateWorkflow` must be re-invoked on the hub — `SignalRPrivateWorkflowClient.wireHandlers()` does this automatically in its `onreconnected` handler.
+
+### Node output conventions
+
+- `ExecutePrivateWorkflow` → two outputs: `[0] Acknowledged`, `[1] Completed` (populated only when `waitForResponse: true` and status is `'Completed'`)
+- `GetPrivateWorkflowResult` → two outputs: `[0] Completed`, `[1] Pending`
+- `PrivateWorkflowResponseHydrator.hydrate()` handles all response-to-`INodeExecutionData` conversion; always use it rather than decoding inline.
+
+### Codex files
+
+Each node directory contains a `[NodeName].node.json` codex file. The `"node"` key must exactly match the camelCase `name` in the `.node.ts` descriptor, and `"nodeVersion"` must match `version`. Bump both in sync when adding a new node version.
+
+### `tsconfig.json` notes
+
+- `"useUnknownInCatchVariables": false` — catch variables are implicitly `any` (not `unknown`). Narrow manually when touching error handling.
+- `"noUnusedLocals": true` — unused imports/variables are compile errors, not just warnings.
+- `target: "es2019"` — avoid ES2020+ features (`??=`, `||=`, etc.) without checking browser/Node compatibility.
+
+---
+
+## n8n Node Standards (quick reference)
+
+- `displayName`: Title Case. `name`: camelCase. Descriptions: capital start, **no trailing period**.
+- Boolean params must be phrased positively ("Wait for Response", not "Skip Response").
+- First option in any `options` array is the default.
+- Use `displayOptions.show` to hide irrelevant fields.
+- Wrap all `execute`/`trigger` logic in `try/catch`; throw `NodeOperationError(this.getNode(), msg, { itemIndex: i })`.
+- Check `this.continueOnFail()` and push error items rather than hard-throwing when appropriate.
+- No external HTTP dependencies — use `this.helpers.httpRequest` (wrapped via `IN8nHttpHelper`).

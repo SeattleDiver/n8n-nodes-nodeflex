@@ -24,8 +24,8 @@ export class PrivateWorkflowTrigger implements INodeType {
 			displayName: 'Private Workflow Trigger',
 			name: 'privateWorkflowTrigger',
 			group: ['trigger'],
-			usableAsTool: true,
-			version: 1,
+				usableAsTool: true,
+				version: 1,
 			description: 'When a remote private workflow is executed',
 			icon: 'file:icon.svg',
 			defaults: {

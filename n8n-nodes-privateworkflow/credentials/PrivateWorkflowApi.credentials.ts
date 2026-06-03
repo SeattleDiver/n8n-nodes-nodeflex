@@ -11,10 +11,8 @@ export class PrivateWorkflowApi implements ICredentialType {
 	name = 'privateWorkflowApi';
 	displayName = 'Private Workflow Credentials API';
 	icon = 'fa:key' as const;
-	documentationUrl = 'https://github.com/SeattleDiver/nodeflex-workflow';
-	description = `Authentication credentials for executing a NodeFlex Private Workflow.
-
-	**Documentation:** [View Setup Guide](https://github.com/SeattleDiver/nodeflex-workflow)`;
+	documentationUrl = 'https://github.com/NodeFlexIO/n8n-nodes-privateworkflow';
+	description = 'Authentication credentials for executing a NodeFlex Private Workflow';
 
 	// 👇 The standard n8n properties definition
 	properties: INodeProperties[] = [
@@ -25,7 +23,7 @@ export class PrivateWorkflowApi implements ICredentialType {
 			typeOptions: { password: true },
 			default: '',
 			required: true,
-			description: 'API key for authenticating with the NodeFlex Private Workflow API.',
+			description: 'API key for authenticating with the NodeFlex Private Workflow API',
 		}
 	];
 
