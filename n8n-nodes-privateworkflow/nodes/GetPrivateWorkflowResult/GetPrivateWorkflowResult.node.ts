@@ -10,7 +10,7 @@ import { HubProfileService } from '../../lib/HubProfileService';
 import { HUB_BASE_URL } from '../../lib/HubConfig';
 import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
 import { WorkflowHubService } from '../../lib/WorkflowHubService';
-import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
+import { PrivateWorkflowResponseHydrator } from '../../lib/PrivateWorkflowResponseHydrator';
 
 export class GetPrivateWorkflowResult implements INodeType {
 	description: INodeTypeDescription = {
@@ -147,72 +147,13 @@ export class GetPrivateWorkflowResult implements INodeType {
 
 		const body = response.body as Record<string, unknown>;
 		const status: string | undefined = body?.status as string | undefined;
-		const payload = body?.payload as PrivateWorkflowPayload | undefined;
 
 		if (!status) {
 			throw new NodeOperationError(this.getNode(), 'Hub response missing status field');
 		}
 
 		// ------------------------------------------------------------
-		// Normalize the payload if reference type
-		// ------------------------------------------------------------
-		let normalizedPayload = payload;
-		if (status === 'Completed' && payload?.type === 'reference') {
-
-			const referenceUrl = payload.value;
-			if (!referenceUrl) {
-				throw new NodeOperationError(
-					this.getNode(),
-					'Reference payload missing URL'
-				);
-			}
-
-			this.logger.info(
-				`[GetPrivateWorkflowResult] Downloading reference payload from ${referenceUrl}`
-			);
-
-			// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
-			const response = await this.helpers.httpRequest({
-				method: 'GET',
-				url: referenceUrl,
-				headers: {
-					'x-api-key': apiKey,
-				},
-			});
-
-			const buffer = Buffer.isBuffer(response)
-				? response
-				: Buffer.from(response);
-
-			let decodedValue: string;
-
-			switch (payload.encoding) {
-				case 'base64':
-					decodedValue = buffer.toString('base64');
-					break;
-
-				case 'json':
-				case 'text':
-					decodedValue = buffer.toString('utf8');
-					break;
-
-				default:
-					throw new NodeOperationError(
-						this.getNode(),
-						`Unsupported payload encoding: ${payload.encoding}`
-					);
-			}
-
-			normalizedPayload = {
-				...payload,
-				type: 'inline',
-				value: decodedValue,
-			};
-		}
-
-
-		// ------------------------------------------------------------
-		// Routing: check if status should continue or pend
+		// Routing: non-Completed statuses
 		// ------------------------------------------------------------
 		const shouldContinue =
 			(status === 'Queued' && continueOnQueued) ||
@@ -220,108 +161,31 @@ export class GetPrivateWorkflowResult implements INodeType {
 			(status === 'Pending' && continueOnPending) ||
 			(status === 'Completed' && continueOnCompleted);
 
-		// Debug logging
 		this.logger.info(
-			`[GetPrivateWorkflowResult] Routing Logic: status=${status} body.status=${body?.status}, shouldContinue=${shouldContinue}, continueOnCompleted=${continueOnCompleted}, continueOnRunning=${continueOnRunning}, continueOnPending=${continueOnPending}, continueOnQueued=${continueOnQueued}`
+			`[GetPrivateWorkflowResult] status=${status}, shouldContinue=${shouldContinue}`,
 		);
 
-		if (!shouldContinue && (status === 'Queued' || status === 'Running' || status === 'Pending')) {
-			// Status is not selected to continue, emit to pending output
-			this.logger.info('[GetPrivateWorkflowResult] Routing to Pending (status not selected to continue)');
-			pending.push({
-				json: {
-					status,
-					correlationId,
-				},
-			});
-			return [completed, pending];
-		}
-
-		// Status is selected to continue, or is Completed
-		// For non-completed statuses, emit minimal response
 		if (status !== 'Completed') {
-			this.logger.info('[GetPrivateWorkflowResult] Routing to Completed (status selected to continue)');
-			completed.push({
-				json: {
-					status,
-					correlationId,
-				},
-			});
-			return [completed, pending];
-		}
-
-		// Status is Completed
-		// ------------------------------------------------------------
-		// Completed with NO payload
-		// ------------------------------------------------------------
-		if (!payload) {
-			completed.push({
-				json: {
-					status,
-					correlationId,
-				},
-			});
-			return [completed, pending];
-		}
-
-		// ------------------------------------------------------------
-		// Completed WITH payload
-		// ------------------------------------------------------------
-		if (normalizedPayload?.type === 'inline') {
-			// -------------------------
-			// JSON
-			// -------------------------
-			if (normalizedPayload.encoding === 'json') {
-				const parsed = JSON.parse(normalizedPayload.value);
-
-				completed.push({
-					json: parsed,
-				});
-			}
-
-			// -------------------------
-			// TEXT
-			// -------------------------
-			else if (normalizedPayload.encoding === 'text') {
-				completed.push({
-					json: {
-						text: normalizedPayload.value,
-					},
-				});
-			}
-
-			// -------------------------
-			// BINARY (base64)
-			// -------------------------
-			else if (normalizedPayload.encoding === 'base64') {
-				const binaryData = Buffer.from(normalizedPayload.value, 'base64');
-
-				completed.push({
-					json: {
-						status,
-						correlationId,
-					},
-					binary: {
-						file: {
-							data: binaryData.toString('base64'),
-							mimeType: 'application/octet-stream',
-							fileName: 'workflow-result.bin',
-						},
-					},
-				});
+			if (shouldContinue) {
+				completed.push({ json: { status, correlationId } });
 			} else {
-				throw new NodeOperationError(
-					this.getNode(),
-					`Unsupported payload encoding: ${normalizedPayload.encoding}`,
-				);
+				pending.push({ json: { status, correlationId } });
 			}
-
 			return [completed, pending];
 		}
 
 		// ------------------------------------------------------------
-		// Fallback
+		// Completed: decode payload (hydrator handles blob resolution)
 		// ------------------------------------------------------------
-		throw new NodeOperationError(this.getNode(), `Unknown workflow status: ${status}`);
+		const result = await PrivateWorkflowResponseHydrator.hydrate(body, {
+			http,
+			apiKey,
+		});
+
+		if (result.state === 'completed') {
+			completed.push(...result.items);
+		}
+
+		return [completed, pending];
 	}
 }

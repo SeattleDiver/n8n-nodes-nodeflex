@@ -1,112 +1,148 @@
-# n8n Custom Node Development, Coding Standards & Submission Guidelines
+# NodeFlex n8n-nodes-privateworkflow — Copilot Instructions
 
-You are an expert n8n custom node developer. Whenever you generate code, refactor, or review files in this repository, you must strictly adhere to the following rules, UI standards, coding styles, and submission checklists required by the n8n community node verification process.
+## Commands
 
-## 1. Naming & Package Metadata
-- **Package Name:** The package name in `package.json` MUST start with `n8n-nodes-` or `@<scope>/n8n-nodes-`.
-- **Keywords:** The `package.json` MUST include `"n8n-community-node-package"` and the name of the external service in its `"keywords"` array.
-- **n8n Metadata:** The `package.json` MUST contain an `"n8n"` object mapping to the node and credential files (e.g., `"n8n": { "nodes": ["dist/nodes/MyNode.node.js"], "credentials": [...] }`).
-- **License:** The project MUST use the MIT License for community node verification.
+```bash
+# from n8n-nodes-privateworkflow/
+npm run build        # compile TypeScript → dist/
+npm run build:watch  # tsc --watch (incremental, no linting)
+npm run dev          # n8n-node dev (hot-reload during development)
+npm run lint         # eslint via @n8n/node-cli (must pass before publish)
+npm run lintfix      # lint --fix (auto-corrects fixable issues)
+npm run format       # prettier on nodes/ and credentials/
+```
 
-## 2. File Structure, Typing & Codex
-- **TypeScript Only:** All node logic must be written in strict TypeScript.
-- **Core Files:** 
-  - Main node: `[NodeName].node.ts`.
-  - Credentials: `[CredentialName].credentials.ts`.
-  - Node metadata: `[NodeName].node.json` (the codex file, required for categories and doc URLs). 
-- **Codex File Matching:** The `"node"` key in the `.json` codex file MUST perfectly match the camelCase `name` defined in the TypeScript file's `INodeTypeDescription`. `"nodeVersion"` MUST perfectly match `version`.
-- **Separation of Concerns:** Keep the `execute` method thin. Extract API interactions into pure functions or a `client.ts` service.
+There is no test suite. The build output goes to `dist/` (listed in `package.json` `"files"`). Only `dist/` is published to npm.
 
-## 3. Strict UI Coding Styles & Parameter Standards
-n8n enforces strict UI consistency. Code must adhere to these exact standards:
-- **Parameter Naming:** 
-  - `displayName`: Must be in Title Case (e.g., "Workflow Name", "JSON Source").
-  - `name`: Must be camelCase (e.g., `workflowName`, `jsonSource`).
-- **Descriptions:** 
-  - Must start with a capital letter.
-  - Must **NOT** end with a period/full stop. (e.g., `description: 'The name of the workflow'` is correct; `...workflow.'` is invalid).
-- **Boolean Parameters:**
-  - Must always be phrased positively (e.g., "Include Details", NOT "Exclude Details").
-- **Options and Multi-Options:**
-  - Option `name` is Title Case. Option `value` is camelCase, snake_case, or exact API value.
-  - The first item in the options array must be the default value.
-- **Display Options:**
-  - Use `displayOptions` heavily to hide fields that aren't relevant based on current selections. Do not overwhelm the user with inactive fields.
-- **Resource/Operation Pattern:**
-  - For REST API integrations, nodes should use the `Resource` and `Operation` pattern (e.g., Resource: 'User', Operation: 'Get').
-
-## 4. Input & Output Data Standards
-- **Standard n8n Data Structure:** All data returned from the `execute`, `trigger`, or `poll` functions MUST be mapped into n8n's standard interface: `INodeExecutionData[][]` (an array of arrays of objects with a `json` key).
-  - Correct: `return [[{ json: { id: 1, name: "Test" } }]];`
-- **No Array Payloads on the Root:** Nodes process single JSON objects. If returning multiple items, return them as multiple items within the n8n data structure, not as a single item with an array inside (unless specifically requested by a parameter).
-- **Binary Data:** Binary data must be stored under the `binary` key within `INodeExecutionData`, not `json`. Buffer/Base64 handling must use n8n's native binary helpers where applicable.
-
-## 5. Security & Credentials
-- **No Hardcoded Secrets:** Never pass API keys, tokens, or URLs directly in node properties. You MUST use n8n's `ICredentialType` framework.
-- **External Dependencies:** Keep `npm` dependencies to an absolute minimum. Use native Node.js and n8n helpers (like `this.helpers.httpRequest`) instead of installing `axios` or `node-fetch`.
-
-## 6. Error Handling
-- **Robust Error Handling:** Do not fail silently. Wrap logic in `try/catch` blocks.
-- **Standard Error Class:** Use `throw new NodeOperationError(this.getNode(), error)` with descriptive messages.
-- **Item Index:** Pass the `itemIndex` to the error when processing multiple items so the user knows exactly which row failed.
-- **Continue on Fail:** Respect the user's workflow settings. If applicable, check `if (this.continueOnFail())` and push the error to the output rather than throwing a hard exception.
-
-## 7. Linting & Code Quality
-- **Linter Passing:** Code MUST pass the official n8n linter (`eslint-plugin-n8n-nodes-base`). Ensure `npm run lint` executes with zero errors.
-- **Icons:** Must be SVG format, 60x60px viewbox, single color or clear identifiable logo, with a transparent background.
-
-## 8. Publishing & NPM Requirements
-- **Provenance Attestation (Required as of May 1, 2026):** All nodes published to the n8n Creator Portal MUST be published to npm with a provenance statement. GitHub Actions workflows must use OIDC tokens to publish with `npm publish --provenance`.
-- **Public NPM:** The package must be public.
-- **README:** Must contain node capabilities, credential setup instructions, and installation instructions.
-
-## 9. Final Verification Checklist
-When prompted to run a Final Pre-Flight Check, evaluate the code for:
-1. Exact matches between `.node.ts` properties and `.node.json` codex keys.
-2. Title Case for `displayName`, camelCase for `name`.
-3. Descriptions do NOT end in periods.
-4. Booleans are positively phrased.
-5. Absolute absence of hardcoded secrets and minimal npm dependencies.
-6. Proper `try/catch` wrapping utilizing `NodeOperationError`.
-7. `npm run lint` compliance.
-8. NPM publishing workflows updated to include `--provenance`.
+Publishing is done via GitHub Actions (`publish.yml`) triggered by a version tag (e.g., `0.2.0`). The workflow runs `npm run build`, `npm run lint`, then `npm publish --provenance --access public`.
 
 ---
 
-# SKILL: Principal TypeScript Engineer & Code Reviewer
-**Trigger:** Activate these rules when the user explicitly asks to "review", "refactor", "optimize", or asks for "expert feedback" on TypeScript code.
+## Architecture
 
-When acting as the Principal TypeScript Engineer, your goal is to elevate working code into enterprise-grade, expert-level TypeScript. You must apply these advanced principles **without violating the n8n custom node standards defined above**.
+This package provides **four n8n nodes** that work together to execute workflows across separate n8n instances via a central SignalR hub (hosted at `https://hub.nodeflex.io`):
 
-## 1. Advanced Type Safety & Soundness
-- **Eradicate `any`:** Flag any use of `any` and replace it with `unknown`, utilizing custom Type Guards or `zod`/schema validation to narrow the type safely.
-- **Discriminated Unions:** Refactor complex boolean flags (e.g., `isSuccess`, `isFailed`) into strict Discriminated Unions to make illegal states unrepresentable.
-- **Exhaustive Checking:** Where `switch` statements or `if/else` chains handle literal types or enums, enforce exhaustive checks using the `never` type.
-- **Utility Types:** Reduce type duplication using `Pick<>`, `Omit<>`, `Record<>`, `ReturnType<>`, and the `satisfies` operator.
+| Node | Class | n8n Interface |
+|------|-------|---------------|
+| Execute Private Workflow | `ExecutePrivateWorkflow` | `INodeType` (regular node) |
+| Private Workflow Trigger | `PrivateWorkflowTrigger` | `INodeType` (trigger node) |
+| Respond to Private Workflow | `RespondToPrivateWorkflow` | `INodeType` (regular node) |
+| Get Private Workflow Result | `GetPrivateWorkflowResult` | `INodeType` (regular node) |
 
-## 2. Execution Efficiency & Performance
-- **Concurrency Optimization:** Identify sequential `await` calls that do not depend on each other and suggest `Promise.all()` or `Promise.allSettled()`. 
-- **Memory Management:** Flag unnecessary object cloning and large intermediate array allocations (e.g., chaining `.map().filter()`). Suggest memory-efficient alternatives like standard `for...of` loops or `reduce`.
-- **Data Structures:** Suggest `Map` instead of `Object` for frequent key-value additions/deletions. Suggest `Set` for deduplication and fast `O(1)` lookups instead of `Array.includes()`.
+```
+n8n Instance A                    NodeFlex Hub                  n8n Instance B
+ExecutePrivateWorkflow  ──POST──▶  /api/{account}/{name}  ──SignalR──▶  PrivateWorkflowTrigger
+                        ◀──ACK──   (correlationId)                       │
+GetPrivateWorkflowResult ◀─poll─  /api/result/{correlationId}  ◀─POST──  RespondToPrivateWorkflow
+```
 
-## 3. Architecture & Maintainability
-- **Separation of Concerns:** Identify massive functions (especially n8n `execute` methods) and suggest extracting complex business logic or data transformations into pure, testable helper functions.
-- **Cyclomatic Complexity:** Refactor deeply nested `if/else` statements using early returns (Guard Clauses) to keep the "happy path" un-indented at the bottom.
-- **Immutability:** Encourage treating data as immutable. Flag the mutation of function arguments.
+### `lib/` — Shared services
 
-## 4. Modern ECMAScript/TypeScript Features
-- Suggest Nullish Coalescing (`??`) instead of logical OR (`||`) to prevent `0` or `""` bugs.
-- Enforce Optional Chaining (`?.`) to prevent undefined property errors.
-- Suggest `structuredClone()` for deep copying instead of `JSON.parse(JSON.stringify())`.
+All business logic lives in `lib/`. These classes are **not** listed in `tsconfig.json`'s `include` but are compiled transitively (nodes import them).
 
-## 5. Resilient Error Handling
-- Reject generic `catch (error)` blocks that throw generic `Error` objects.
-- Ensure the `error` in a catch block is typed as `unknown` and properly narrowed (`if (error instanceof Error)`).
-- *Integration Note:* Always ensure errors are ultimately wrapped in n8n's `NodeOperationError` as required by the n8n guidelines.
+| File | Purpose |
+|------|---------|
+| `HubConfig.ts` | Single source of truth for `HUB_BASE_URL` and `HUB_VERIFY_URL` |
+| `HubProfileService.ts` | Fetches hub routing info (`WorkflowHubService`) from `/api/apikeys/hub` |
+| `WorkflowHubService.ts` | Typed shape returned by `HubProfileService.getHubInfo()` |
+| `SignalRClient.ts` | Zero-dependency custom SignalR WebSocket client |
+| `SignalRPrivateWorkflowClient.ts` | Wraps `SignalRClient`; handles register/ACK/execute/respond hub messages |
+| `PrivateWorkflowHttpClient.ts` | Thin HTTP POST wrapper (used by `ExecutePrivateWorkflow`) |
+| `WorkflowPayloadBlobTransport.ts` | Upload/download payloads to blob storage (payloads 64 KB – 10 MB) |
+| `PrivateWorkflowResponseHydrator.ts` | Decodes hub responses into `INodeExecutionData[]` |
+| `PrivateWorkflowPayload.ts` | Discriminated union type for all payload transport |
+| `N8nHttpHelper.ts` | `IN8nHttpHelper` interface — how lib classes accept HTTP without coupling to n8n context |
 
-## Output Format
-When executing this skill, format your response as follows:
-1. **High-Level Critique:** A 1-2 sentence summary of the code's current state.
-2. **Critical Refactors:** Severe vulnerabilities, memory leaks, or type bypasses that *must* be fixed.
-3. **Expert Suggestions:** Provide a **Before** and **After** code block for your major suggestions.
-4. **The "Why":** Briefly explain the underlying computer science, big-O complexity, or TS compiler reason for your suggestion.
+---
+
+## Key Conventions
+
+### `IN8nHttpHelper` — loose coupling to n8n runtime
+
+Lib classes never accept `IExecuteFunctions` or `ITriggerFunctions` directly. They receive `IN8nHttpHelper`:
+
+```typescript
+// In a node file:
+const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
+const hubService = new HubProfileService(hubBase, http);
+```
+
+This keeps `lib/` classes independently testable and decoupled from the n8n execution context.
+
+### `HubConfig.ts` — environment flag
+
+`HUB_BASE_URL` in `lib/HubConfig.ts` is currently set to `https://localhost:7093` for local development against a self-hosted hub. Before releasing, switch it to the production URL:
+
+```typescript
+// Development (current)
+export const HUB_BASE_URL = 'https://localhost:7093';
+
+// Production (uncomment before publishing)
+// export const HUB_BASE_URL = 'https://hub.nodeflex.io';
+```
+
+The `HubProfileService` also has `skipSslCertificateValidation: false` — leave it `false` in production.
+
+### `PrivateWorkflowPayload` — discriminated union
+
+All payloads between nodes and the hub use this shape. The `type` field drives transport; `encoding` drives deserialization:
+
+```typescript
+type PrivateWorkflowPayloadType = 'inline' | 'reference';
+type PrivateWorkflowPayloadEncoding = 'json' | 'base64' | 'text';
+
+interface PrivateWorkflowPayload {
+  type: PrivateWorkflowPayloadType;  // 'inline' = value is the payload; 'reference' = value is a URL
+  value: string;
+  length: number;
+  isEncrypted: boolean;
+  encoding: PrivateWorkflowPayloadEncoding;
+}
+```
+
+Payloads ≤ 64 KB → `inline` transport via SignalR.  
+Payloads 64 KB – 10 MB → `reference` transport via `WorkflowPayloadBlobTransport`.
+
+### Hub profile is fetched per-execution
+
+`ExecutePrivateWorkflow` calls `HubProfileService.getHubInfo(apiKey)` on every execution to retrieve the current hub routing URLs (`hubUrl`, `apiUrl`, `blobStorageUrl`, `accountPath`, tier limits, etc.). This means hub configuration is dynamic — never cache the hub URL across executions.
+
+### Correlation ID flow
+
+`__correlationId` is injected into the trigger output JSON and must be passed through to `RespondToPrivateWorkflow` via expression `{{ $json.__correlationId }}`. The `GetPrivateWorkflowResult` node polls using the `correlationId` from the `ExecutePrivateWorkflow` "Acknowledged" output.
+
+### Trigger reconnect strategy
+
+`PrivateWorkflowTrigger` uses a two-tier reconnect loop:
+1. **`SignalRClient` / `HubConnection`** handles brief network blips with a 5-minute retry budget and exponential backoff.
+2. **Trigger-level loop** catches `onConnectionLost` events, re-fetches `HubProfileService.getHubInfo()`, and restarts the full `SignalRPrivateWorkflowClient` with an 8-hour budget.
+
+After every reconnect, `RegisterPrivateWorkflow` must be re-invoked on the hub — `SignalRPrivateWorkflowClient.wireHandlers()` does this automatically in its `onreconnected` handler.
+
+### Node output conventions
+
+- `ExecutePrivateWorkflow` → two outputs: `[0] Acknowledged`, `[1] Completed` (populated only when `waitForResponse: true` and status is `'Completed'`)
+- `GetPrivateWorkflowResult` → two outputs: `[0] Completed`, `[1] Pending`
+- `PrivateWorkflowResponseHydrator.hydrate()` handles all response-to-`INodeExecutionData` conversion; always use it rather than decoding inline.
+
+### Codex files
+
+Each node directory contains a `[NodeName].node.json` codex file. The `"node"` key must exactly match the camelCase `name` in the `.node.ts` descriptor, and `"nodeVersion"` must match `version`. Bump both in sync when adding a new node version.
+
+### `tsconfig.json` notes
+
+- `"useUnknownInCatchVariables": false` — catch variables are implicitly `any` (not `unknown`). Narrow manually when touching error handling.
+- `"noUnusedLocals": true` — unused imports/variables are compile errors, not just warnings.
+- `target: "es2019"` — avoid ES2020+ features (`??=`, `||=`, etc.) without checking browser/Node compatibility.
+
+---
+
+## n8n Node Standards (quick reference)
+
+- `displayName`: Title Case. `name`: camelCase. Descriptions: capital start, **no trailing period**.
+- Boolean params must be phrased positively ("Wait for Response", not "Skip Response").
+- First option in any `options` array is the default.
+- Use `displayOptions.show` to hide irrelevant fields.
+- Wrap all `execute`/`trigger` logic in `try/catch`; throw `NodeOperationError(this.getNode(), msg, { itemIndex: i })`.
+- Check `this.continueOnFail()` and push error items rather than hard-throwing when appropriate.
+- No external HTTP dependencies — use `this.helpers.httpRequest` (wrapped via `IN8nHttpHelper`).

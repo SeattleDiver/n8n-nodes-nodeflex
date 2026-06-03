@@ -1,8 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { INodeExecutionData } from 'n8n-workflow';
+import { IN8nHttpHelper } from './N8nHttpHelper';
+import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
 
 export interface HydrationOptions {
 	binaryPropertyName?: string; // default: 'file'
+	/** Required only when the hub may return a reference (blob) payload */
+	http?: IN8nHttpHelper;
+	apiKey?: string;
 }
 
 export interface HydrationResult {
@@ -12,10 +17,10 @@ export interface HydrationResult {
 
 export class PrivateWorkflowResponseHydrator {
 
-	static hydrate(
+	static async hydrate(
 		body: any,
 		options: HydrationOptions = {}
-	): HydrationResult {
+	): Promise<HydrationResult> {
 
 		const binaryKey = options.binaryPropertyName ?? 'file';
 		const status: string | undefined = body?.status;
@@ -30,11 +35,7 @@ export class PrivateWorkflowResponseHydrator {
 		if (status === 'Queued' || status === 'Running' || status === 'Pending') {
 			return {
 				state: 'pending',
-				items: [
-					{
-						json: { status },
-					},
-				],
+				items: [{ json: { status } }],
 			};
 		}
 
@@ -45,7 +46,7 @@ export class PrivateWorkflowResponseHydrator {
 			throw new Error(`Unknown workflow status: ${status}`);
 		}
 
-		const payload = body?.payload;
+		let payload: PrivateWorkflowPayload | undefined = body?.payload;
 
 		// ------------------------------------------------------------
 		// No payload
@@ -53,11 +54,7 @@ export class PrivateWorkflowResponseHydrator {
 		if (!payload || payload.value == null) {
 			return {
 				state: 'completed',
-				items: [
-					{
-						json: { status },
-					},
-				],
+				items: [{ json: { status } }],
 			};
 		}
 
@@ -65,12 +62,39 @@ export class PrivateWorkflowResponseHydrator {
 			throw new Error('Payload value must be a string');
 		}
 
-		const encoding = payload.encoding as
-			| 'json'
-			| 'text'
-			| 'base64'
-			| undefined;
+		// ------------------------------------------------------------
+		// Resolve reference payload (blob download)
+		// ------------------------------------------------------------
+		if (payload.type === 'reference') {
+			if (!options.http || !options.apiKey) {
+				throw new Error('http and apiKey are required to resolve reference payloads');
+			}
 
+			const response = await options.http.httpRequest({
+				method: 'GET',
+				url: payload.value,
+				headers: { 'x-api-key': options.apiKey },
+			});
+
+			const buffer = Buffer.isBuffer(response) ? response : Buffer.from(response);
+
+			let decodedValue: string;
+			switch (payload.encoding) {
+				case 'base64':
+					decodedValue = buffer.toString('base64');
+					break;
+				case 'json':
+				case 'text':
+					decodedValue = buffer.toString('utf8');
+					break;
+				default:
+					throw new Error(`Unsupported payload encoding: ${payload.encoding}`);
+			}
+
+			payload = { ...payload, type: 'inline', value: decodedValue };
+		}
+
+		const encoding = payload.encoding;
 		if (!encoding) {
 			throw new Error('Payload encoding is required');
 		}
@@ -80,7 +104,6 @@ export class PrivateWorkflowResponseHydrator {
 		// ------------------------------------------------------------
 		if (encoding === 'json') {
 			let parsed: any;
-
 			try {
 				parsed = JSON.parse(payload.value);
 			} catch {
@@ -91,24 +114,14 @@ export class PrivateWorkflowResponseHydrator {
 				return {
 					state: 'completed',
 					items: parsed.map((element) => ({
-						json: {
-							status,
-							...(element ?? {}),
-						},
+						json: { status, ...(element ?? {}) },
 					})),
 				};
 			}
 
 			return {
 				state: 'completed',
-				items: [
-					{
-						json: {
-							status,
-							...(parsed ?? {}),
-						},
-					},
-				],
+				items: [{ json: { status, ...(parsed ?? {}) } }],
 			};
 		}
 
@@ -118,14 +131,7 @@ export class PrivateWorkflowResponseHydrator {
 		if (encoding === 'text') {
 			return {
 				state: 'completed',
-				items: [
-					{
-						json: {
-							status,
-							text: payload.value,
-						},
-					},
-				],
+				items: [{ json: { status, text: payload.value } }],
 			};
 		}
 

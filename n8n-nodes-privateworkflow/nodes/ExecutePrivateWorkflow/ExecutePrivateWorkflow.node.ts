@@ -465,8 +465,10 @@ export class ExecutePrivateWorkflow implements INodeType {
 				// Completed output when waiting and workflow completed
 				if (body?.status) {
 					if (waitForResponse && body.status === 'Completed') {
-						const result = PrivateWorkflowResponseHydrator.hydrate(body, {
-							binaryPropertyName: 'file', // you can wire this to a node param later if desired
+						const result = await PrivateWorkflowResponseHydrator.hydrate(body, {
+							binaryPropertyName: 'file',
+							http,
+							apiKey,
 						});
 
 						if (result.state === 'completed') {
