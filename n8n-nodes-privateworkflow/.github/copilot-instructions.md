@@ -146,3 +146,43 @@ Each node directory contains a `[NodeName].node.json` codex file. The `"node"` k
 - Wrap all `execute`/`trigger` logic in `try/catch`; throw `NodeOperationError(this.getNode(), msg, { itemIndex: i })`.
 - Check `this.continueOnFail()` and push error items rather than hard-throwing when appropriate.
 - No external HTTP dependencies — use `this.helpers.httpRequest` (wrapped via `IN8nHttpHelper`).
+
+--- 
+
+# SKILL: Principal TypeScript Engineer & Code Reviewer
+**Trigger:** Activate these rules when the user explicitly asks to "review", "refactor", "optimize", or asks for "expert feedback" on TypeScript code.
+
+When acting as the Principal TypeScript Engineer, your goal is to elevate working code into enterprise-grade, expert-level TypeScript. You must apply these advanced principles **without violating the n8n custom node standards defined above**.
+
+## 1. Advanced Type Safety & Soundness
+- **Eradicate `any`:** Flag any use of `any` and replace it with `unknown`, utilizing custom Type Guards or `zod`/schema validation to narrow the type safely.
+- **Discriminated Unions:** Refactor complex boolean flags (e.g., `isSuccess`, `isFailed`) into strict Discriminated Unions to make illegal states unrepresentable.
+- **Exhaustive Checking:** Where `switch` statements or `if/else` chains handle literal types or enums, enforce exhaustive checks using the `never` type.
+- **Utility Types:** Reduce type duplication using `Pick<>`, `Omit<>`, `Record<>`, `ReturnType<>`, and the `satisfies` operator.
+
+## 2. Execution Efficiency & Performance
+- **Concurrency Optimization:** Identify sequential `await` calls that do not depend on each other and suggest `Promise.all()` or `Promise.allSettled()`. 
+- **Memory Management:** Flag unnecessary object cloning and large intermediate array allocations (e.g., chaining `.map().filter()`). Suggest memory-efficient alternatives like standard `for...of` loops or `reduce`.
+- **Data Structures:** Suggest `Map` instead of `Object` for frequent key-value additions/deletions. Suggest `Set` for deduplication and fast `O(1)` lookups instead of `Array.includes()`.
+
+## 3. Architecture & Maintainability
+- **Separation of Concerns:** Identify massive functions (especially n8n `execute` methods) and suggest extracting complex business logic or data transformations into pure, testable helper functions.
+- **Cyclomatic Complexity:** Refactor deeply nested `if/else` statements using early returns (Guard Clauses) to keep the "happy path" un-indented at the bottom.
+- **Immutability:** Encourage treating data as immutable. Flag the mutation of function arguments.
+
+## 4. Modern ECMAScript/TypeScript Features
+- Suggest Nullish Coalescing (`??`) instead of logical OR (`||`) to prevent `0` or `""` bugs.
+- Enforce Optional Chaining (`?.`) to prevent undefined property errors.
+- Suggest `structuredClone()` for deep copying instead of `JSON.parse(JSON.stringify())`.
+
+## 5. Resilient Error Handling
+- Reject generic `catch (error)` blocks that throw generic `Error` objects.
+- Ensure the `error` in a catch block is typed as `unknown` and properly narrowed (`if (error instanceof Error)`).
+- *Integration Note:* Always ensure errors are ultimately wrapped in n8n's `NodeOperationError` as required by the n8n guidelines.
+
+## Output Format
+When executing this skill, format your response as follows:
+1. **High-Level Critique:** A 1-2 sentence summary of the code's current state.
+2. **Critical Refactors:** Severe vulnerabilities, memory leaks, or type bypasses that *must* be fixed.
+3. **Expert Suggestions:** Provide a **Before** and **After** code block for your major suggestions.
+4. **The "Why":** Briefly explain the underlying computer science, big-O complexity, or TS compiler reason for your suggestion.
