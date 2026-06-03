@@ -11,8 +11,8 @@
 #   1. Log in to npmjs.com and open your package's settings.
 #   2. Under "Publish access" → "Trusted Publishers", click "Add a publisher".
 #   3. Select GitHub Actions and fill in:
-#        Repository owner: seattlediver
-#        Repository name:  n8n-cloudworkflow
+#        Repository owner: NodeFlexIO
+#        Repository name:  n8n-nodes-privateworkflow
 #        Workflow name:    publish.yml
 #        Environment:      (leave blank unless you use GitHub Environments)
 #   4. Leave the NPM_TOKEN secret unset in this repository.
@@ -63,9 +63,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Release with provenance
-        run: |
-          [ -n "$NPM_TOKEN" ] && npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          npm run release
+      - name: Set up npm auth
+        if: env.NPM_TOKEN != ''
+        run: npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

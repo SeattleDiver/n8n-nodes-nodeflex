@@ -1,8 +1,11 @@
 {
-	"node": "n8n-nodes-base.httpbin",
-	"nodeVersion": "1.0",
+	"node": "@nodeflex/n8n-nodes-privateworkflow.respondToPrivateWorkflow",
+	"nodeVersion": "1",
 	"codexVersion": "1.0",
-	"categories": ["Development", "Communication"],
+	"categories": [
+		"Development",
+		"Communication"
+	],
 	"resources": {
 		"credentialDocumentation": [
 			{

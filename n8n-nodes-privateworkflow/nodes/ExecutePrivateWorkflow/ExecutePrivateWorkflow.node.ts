@@ -130,32 +130,19 @@ export class ExecutePrivateWorkflow implements INodeType {
 				},
 			},
 			{
-				displayName: 'JSON',
-				name: 'jsonText',
-				type: 'string',
-				default: '',
-				placeholder: '{ "foo": "bar" }',
-				description: 'JSON object or expression that evaluates to an object',
-				displayOptions: {
-					show: {
-						payloadType: ['json'],
-						jsonSource: ['custom'],
+					displayName: 'JSON',
+					name: 'jsonText',
+					type: 'string',
+					default: '',
+					placeholder: '{ "foo": "bar" }',
+					description: 'JSON object or expression that evaluates to an object',
+					displayOptions: {
+						show: {
+							payloadType: ['json'],
+							jsonSource: ['custom'],
+						},
 					},
 				},
-			},
-			{
-				displayName: 'JSON',
-				name: 'jsonValue',
-				type: 'json',
-				default: {},
-				description: 'JSON object or expression that evaluates to an object',
-				displayOptions: {
-					show: {
-						payloadType: ['json'],
-						jsonSource: ['custom'],
-					},
-				},
-			},
 			{
 				displayName: 'Wait for Response',
 				name: 'waitForResponse',
