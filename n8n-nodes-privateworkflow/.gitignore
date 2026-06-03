@@ -9,3 +9,10 @@ library/*.js.map
 npm-debug.log*
 yarn.lock
 .vscode/launch.json
+
+# Build artifacts
+*.tgz
+tsconfig.tsbuildinfo
+
+# Copilot / editor instructions (internal tooling, not for public consumers)
+.github/copilot-instructions.md
