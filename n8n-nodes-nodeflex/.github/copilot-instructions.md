@@ -1,9 +1,9 @@
-# NodeFlex n8n-nodes-privateworkflow — Copilot Instructions
+# NodeFlex n8n-nodes-nodeflex — Copilot Instructions
 
 ## Commands
 
 ```bash
-# from n8n-nodes-privateworkflow/
+# from n8n-nodes-nodeflex/
 npm run build        # compile TypeScript → dist/
 npm run build:watch  # tsc --watch (incremental, no linting)
 npm run dev          # n8n-node dev (hot-reload during development)

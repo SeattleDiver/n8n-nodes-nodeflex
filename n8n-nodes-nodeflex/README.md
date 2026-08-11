@@ -1,5 +1,5 @@
 # NodeFlex
-### n8n-nodes-privateworkflow
+### n8n-nodes-nodeflex
 
 This is an n8n community node package. It lets you execute remote private workflows securely in your n8n workflows using [NodeFlex](https://nodeflex.io).
 
@@ -27,7 +27,7 @@ NodeFlex Private Workflow enables real-time, bidirectional workflow execution ac
 1. Open your n8n instance
 2. Go to **Settings → Community Nodes**
 3. Select **Install a community node**
-4. Enter `@nodeflex/n8n-nodes-privateworkflow` in the package name field
+4. Enter `@nodeflex/n8n-nodes-nodeflex` in the package name field
 5. Agree to the risks of using community nodes
 6. Click **Install**
 
@@ -39,7 +39,7 @@ If you self-host n8n, you can install the package directly into your n8n custom 
 
 ```bash
 cd ~/.n8n/custom
-npm install @nodeflex/n8n-nodes-privateworkflow
+npm install @nodeflex/n8n-nodes-nodeflex
 ```
 
 Then restart your n8n instance for the nodes to be loaded.
@@ -50,7 +50,7 @@ If you run n8n in Docker, add the package name to the `N8N_COMMUNITY_PACKAGES` e
 
 ```bash
 docker run -it --rm \
-  -e N8N_COMMUNITY_PACKAGES="@nodeflex/n8n-nodes-privateworkflow" \
+  -e N8N_COMMUNITY_PACKAGES="@nodeflex/n8n-nodes-nodeflex" \
   -p 5678:5678 \
   n8nio/n8n
 ```
@@ -59,7 +59,7 @@ Or in your `docker-compose.yml`:
 
 ```yaml
 environment:
-  - N8N_COMMUNITY_PACKAGES=@nodeflex/n8n-nodes-privateworkflow
+  - N8N_COMMUNITY_PACKAGES=@nodeflex/n8n-nodes-nodeflex
 ```
 
 ### Verify Installation
