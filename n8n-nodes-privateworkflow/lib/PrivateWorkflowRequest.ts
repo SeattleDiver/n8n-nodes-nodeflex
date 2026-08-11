@@ -1,10 +1,10 @@
 import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
 
 export interface PrivateWorkflowRequest {
-	correlationId?: string;
-	requestId?: string;
-	path?: string;
-	payload?: PrivateWorkflowPayload;
+	correlationId: string;
+	requestId: string;
+	path: string;
+	payload: PrivateWorkflowPayload;
 	waitForResponse: boolean;
-	waitTimeout: number
+	waitTimeout: number;
 }

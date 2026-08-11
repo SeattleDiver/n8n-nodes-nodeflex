@@ -1,5 +1,6 @@
 import {
 	IExecuteFunctions,
+	IHttpRequestOptions,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
@@ -8,7 +9,6 @@ import {
 
 import { randomUUID } from 'crypto';
 
-import { PrivateWorkflowHttpClient } from '../../lib/PrivateWorkflowHttpClient';
 import { HubProfileService } from '../../lib/HubProfileService';
 import { WorkflowHubService } from '../../lib/WorkflowHubService';
 import { PrivateWorkflowRequest } from '../../lib/PrivateWorkflowRequest';
@@ -19,7 +19,6 @@ import { HUB_BASE_URL } from '../../lib/HubConfig';
 import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
 
 export class ExecutePrivateWorkflow implements INodeType {
-
 	description: INodeTypeDescription = {
 		displayName: 'Execute Private Workflow',
 		name: 'executePrivateWorkflow',
@@ -96,6 +95,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 				name: 'textValue',
 				type: 'string',
 				default: '',
+				description: 'The plain text to send as the workflow payload',
 				displayOptions: {
 					show: {
 						payloadType: ['text'],
@@ -130,26 +130,26 @@ export class ExecutePrivateWorkflow implements INodeType {
 				},
 			},
 			{
-					displayName: 'JSON',
-					name: 'jsonText',
-					type: 'string',
-					default: '',
-					placeholder: '{ "foo": "bar" }',
-					description: 'JSON object or expression that evaluates to an object',
-					displayOptions: {
-						show: {
-							payloadType: ['json'],
-							jsonSource: ['custom'],
-						},
+				displayName: 'JSON',
+				name: 'jsonText',
+				type: 'string',
+				default: '',
+				placeholder: '{ "foo": "bar" }',
+				description: 'JSON object or expression that evaluates to an object',
+				displayOptions: {
+					show: {
+						payloadType: ['json'],
+						jsonSource: ['custom'],
 					},
 				},
+			},
 			{
 				displayName: 'Wait for Response',
 				name: 'waitForResponse',
 				type: 'boolean',
 				default: false,
 				description: 'Whether or not to wait for the private workflow to send a response',
-				hint: 'If enabled, this node will wait for the workflow to complete'
+				hint: 'If enabled, this node will wait for the workflow to complete',
 			},
 			{
 				displayName: 'Wait for Response Timeout',
@@ -166,7 +166,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 					},
 				},
 				description: 'Maximum time to wait for a workflow response',
-				hint: 'Wait time can be up to 15 seconds.'
+				hint: 'Wait time can be up to 15 seconds.',
 			},
 		],
 	};
@@ -192,11 +192,9 @@ export class ExecutePrivateWorkflow implements INodeType {
 				try {
 					hubInfo = await hubService.getHubInfo(apiKey);
 				} catch {
-					throw new NodeOperationError(
-						this.getNode(),
-						'Hub service is unavailable.',
-						{ itemIndex: i },
-					);
+					throw new NodeOperationError(this.getNode(), 'Hub service is unavailable.', {
+						itemIndex: i,
+					});
 				}
 
 				const hubUrl = hubInfo.hubUrl;
@@ -378,7 +376,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 				let payload: PrivateWorkflowPayload;
 
 				if (useReference) {
-
+					this.logger.info(`Upload blob to ${blobUrl}`);
 					const blobTransport = new WorkflowPayloadBlobTransport({
 						baseUrl: blobUrl,
 						apiKey,
@@ -403,9 +401,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 					this.logger.info(
 						`[ExecutePrivateWorkflow] Payload uploaded (${payloadLength} bytes) → ${upload.url}`,
 					);
-
 				} else {
-
 					payload = {
 						type: 'inline',
 						value: encodedPayload,
@@ -427,14 +423,34 @@ export class ExecutePrivateWorkflow implements INodeType {
 					waitTimeout,
 				};
 
-				// Send request (keep existing behavior)
-				const client = new PrivateWorkflowHttpClient({
-					apiKey,
-				}, http);
-
 				this.logger.info('Calling private workflow');
 
-				const response = await client.post(targetUrl, request as unknown as Record<string, unknown>);
+				const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+				if (apiKey) {
+					requestHeaders['x-api-key'] = apiKey;
+				}
+
+				const httpResponse = await http.httpRequest({
+					method: 'POST',
+					url: targetUrl,
+					headers: requestHeaders,
+					body: JSON.stringify(request),
+					timeout: 15000,
+					returnFullResponse: true,
+					json: false,
+				} as IHttpRequestOptions);
+
+				const rawBody = httpResponse.body;
+				const response =
+					typeof rawBody === 'string'
+						? (() => {
+								try {
+									return JSON.parse(rawBody);
+								} catch {
+									return rawBody;
+								}
+							})()
+						: rawBody;
 
 				// --------------------------------------------------------------------
 				// Output the responses (keep existing behavior)
@@ -446,7 +462,10 @@ export class ExecutePrivateWorkflow implements INodeType {
 					});
 				}
 
-				const body = ((response as Record<string, unknown>).body ?? response) as Record<string, unknown>;
+				const body = ((response as Record<string, unknown>).body ?? response) as Record<
+					string,
+					unknown
+				>;
 				if (!body || typeof body !== 'object') {
 					throw new NodeOperationError(this.getNode(), 'Invalid response body from hub', {
 						itemIndex: i,
@@ -497,12 +516,9 @@ export class ExecutePrivateWorkflow implements INodeType {
 					throw error;
 				}
 
-				const message = error instanceof Error ? error.message : 'Unexpected error executing private workflow';
-				throw new NodeOperationError(
-					this.getNode(),
-					message,
-					{ itemIndex: i },
-				);
+				const message =
+					error instanceof Error ? error.message : 'Unexpected error executing private workflow';
+				throw new NodeOperationError(this.getNode(), message, { itemIndex: i });
 			}
 		}
 

@@ -22,7 +22,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		description: 'Retrieves the current status or result of a Private Workflow execution',
 		icon: 'file:icon.svg',
 		defaults: {
-			name: 'Get Private Workflow Result'
+			name: 'Get Private Workflow Result',
 		},
 		inputs: ['main'],
 		outputs: ['main', 'main'],
@@ -48,7 +48,8 @@ export class GetPrivateWorkflowResult implements INodeType {
 				type: 'multiOptions',
 				default: ['Completed'],
 				required: true,
-				description: 'Select which workflow statuses should emit to the Completed output and continue the workflow. Unselected statuses will emit to the Pending output.',
+				description:
+					'Select which workflow statuses should emit to the Completed output and continue the workflow. Unselected statuses will emit to the Pending output.',
 				options: [
 					{
 						name: 'Completed',
@@ -117,10 +118,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		try {
 			hubInfo = await hubService.getHubInfo(apiKey);
 		} catch {
-			throw new NodeOperationError(
-				this.getNode(),
-				'Hub service is unavailable.',
-			);
+			throw new NodeOperationError(this.getNode(), 'Hub service is unavailable.');
 		}
 
 		if (!hubInfo.hubUrl || !hubInfo.apiUrl || !hubInfo.blobStorageUrl) {

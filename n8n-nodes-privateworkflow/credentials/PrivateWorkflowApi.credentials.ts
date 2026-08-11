@@ -24,7 +24,7 @@ export class PrivateWorkflowApi implements ICredentialType {
 			default: '',
 			required: true,
 			description: 'API key for authenticating with the NodeFlex Private Workflow API',
-		}
+		},
 	];
 
 	// Define the built-in test connection configuration

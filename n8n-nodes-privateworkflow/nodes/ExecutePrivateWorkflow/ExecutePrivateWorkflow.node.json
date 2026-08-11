@@ -2,10 +2,7 @@
 	"node": "@nodeflex/n8n-nodes-privateworkflow.executePrivateWorkflow",
 	"nodeVersion": "1",
 	"codexVersion": "1.0",
-	"categories": [
-		"Development",
-		"Communication"
-	],
+	"categories": ["Development", "Communication"],
 	"resources": {
 		"credentialDocumentation": [
 			{

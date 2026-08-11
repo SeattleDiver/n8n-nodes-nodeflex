@@ -4,9 +4,12 @@ import {
 	INodeType,
 	INodeTypeDescription,
 	IDataObject,
-	NodeOperationError
+	NodeOperationError,
 } from 'n8n-workflow';
-import { PrivateWorkflowPayload, PrivateWorkflowPayloadEncoding } from '../../lib/PrivateWorkflowPayload';
+import {
+	PrivateWorkflowPayload,
+	PrivateWorkflowPayloadEncoding,
+} from '../../lib/PrivateWorkflowPayload';
 import { PrivateWorkflowResponse } from '../../lib/PrivateWorkflowResponse';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
 import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
@@ -23,7 +26,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 		usableAsTool: true,
 		icon: 'file:icon.svg',
 		defaults: {
-			name: 'Respond to Private Workflow'
+			name: 'Respond to Private Workflow',
 		},
 		inputs: ['main'],
 		outputs: ['main'],
@@ -44,35 +47,35 @@ export class RespondToPrivateWorkflow implements INodeType {
 					{
 						name: 'All Incoming Items',
 						value: 'allItems',
-						description: 'Return all incoming items as JSON objects (binary data is not supported)'
+						description: 'Return all incoming items as JSON objects (binary data is not supported)',
 					},
 					{
 						name: 'Binary File',
 						value: 'binary',
-						description: 'Return a binary file from the incoming items'
+						description: 'Return a binary file from the incoming items',
 					},
 					{
 						name: 'First Incoming Item',
 						value: 'firstItem',
-						description: 'Return the first incoming item as a JSON object (binary data is not supported)'
+						description:
+							'Return the first incoming item as a JSON object (binary data is not supported)',
 					},
 					{
 						name: 'JSON',
 						value: 'json',
-						description: 'Return a custom JSON object defined in this node'
+						description: 'Return a custom JSON object defined in this node',
 					},
 					{
 						name: 'No Data',
 						value: 'none',
-						description: 'Return no response payload'
+						description: 'Return no response payload',
 					},
 					{
 						name: 'Text',
 						value: 'text',
-						description: 'Return a plain text response'
+						description: 'Return a plain text response',
 					},
 				],
-
 			},
 
 			// ---------- JSON Response ----------
@@ -81,7 +84,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 				name: 'responseData',
 				type: 'string',
 				typeOptions: {
-					rows: 4
+					rows: 4,
 				},
 				default: ``,
 				description: 'The JSON to send in the response',
@@ -141,8 +144,9 @@ export class RespondToPrivateWorkflow implements INodeType {
 				type: 'string',
 				default: '',
 				required: true,
-		    // eslint-disable-next-line n8n-nodes-base/node-param-description-miscased-json
-				description: 'Select the correlation ID from your Private Workflow Trigger output, example: {{ $json.__correlationId }}',
+				// eslint-disable-next-line n8n-nodes-base/node-param-description-miscased-json
+				description:
+					'Select the correlation ID from your Private Workflow Trigger output, example: {{ $json.__correlationId }}',
 				hint: 'Use expression editor to choose it from your trigger node',
 			},
 			{
@@ -158,7 +162,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 					},
 				},
 			},
-		]
+		],
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -169,7 +173,10 @@ export class RespondToPrivateWorkflow implements INodeType {
 		} | null;
 		const apiKey = creds?.apiKey;
 		if (!apiKey) {
-			throw new NodeOperationError(this.getNode(), 'API key is missing. Add it in the node credentials.');
+			throw new NodeOperationError(
+				this.getNode(),
+				'API key is missing. Add it in the node credentials.',
+			);
 		}
 		const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
 		const hubService = new HubProfileService(HUB_BASE_URL, http);
@@ -178,28 +185,26 @@ export class RespondToPrivateWorkflow implements INodeType {
 			throw new NodeOperationError(this.getNode(), 'API URL is unavailable. Hub service is down.');
 		}
 
-	  let correlationId = this.getNodeParameter('correlationId', 0) as string;
+		let correlationId = this.getNodeParameter('correlationId', 0) as string;
 		correlationId = correlationId.trim();
 		if (!correlationId) {
 			throw new NodeOperationError(this.getNode(), 'Correlation ID is required.');
 		}
 		const completedUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/completed/${encodeURIComponent(correlationId)}`;
 
-		let encoding: PrivateWorkflowPayloadEncoding = "json";
+		let encoding: PrivateWorkflowPayloadEncoding = 'json';
 		const respondWith = this.getNodeParameter('respondWith', 0) as string;
 
-		try
-		{
+		try {
 			let payload: IDataObject | IDataObject[] | string | null | undefined;
 			switch (respondWith) {
-
 				case 'allItems': {
 					// Reject binary explicitly
 					for (const item of items) {
 						if (item.binary && Object.keys(item.binary).length > 0) {
 							throw new NodeOperationError(
 								this.getNode(),
-								'"All Items" response does not support binary data. Use "Binary File" instead.'
+								'"All Items" response does not support binary data. Use "Binary File" instead.',
 							);
 						}
 					}
@@ -232,14 +237,14 @@ export class RespondToPrivateWorkflow implements INodeType {
 					if (item.binary && Object.keys(item.binary).length > 0) {
 						throw new NodeOperationError(
 							this.getNode(),
-							'"First Item" response does not support binary data. Use "Binary File" instead.'
+							'"First Item" response does not support binary data. Use "Binary File" instead.',
 						);
 					}
 
 					if (!item.json || typeof item.json !== 'object' || Array.isArray(item.json)) {
 						throw new NodeOperationError(
 							this.getNode(),
-							'"First Item" requires the item to be a JSON object.'
+							'"First Item" requires the item to be a JSON object.',
 						);
 					}
 
@@ -268,17 +273,14 @@ export class RespondToPrivateWorkflow implements INodeType {
 						if (!trimmed) {
 							throw new NodeOperationError(
 								this.getNode(),
-								'Response Body is empty; expected valid JSON'
+								'Response Body is empty; expected valid JSON',
 							);
 						}
 
 						try {
 							parsed = JSON.parse(trimmed);
 						} catch {
-							throw new NodeOperationError(
-								this.getNode(),
-								'Response Body must contain valid JSON'
-							);
+							throw new NodeOperationError(this.getNode(), 'Response Body must contain valid JSON');
 						}
 					}
 
@@ -286,7 +288,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 					else {
 						throw new NodeOperationError(
 							this.getNode(),
-							`Response Body resolved to unsupported type (${typeof raw})`
+							`Response Body resolved to unsupported type (${typeof raw})`,
 						);
 					}
 
@@ -295,9 +297,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 					// Canonical n8n output
 					if (Array.isArray(parsed)) {
-						outputItems.push(
-							...parsed.map(p => ({ json: p as IDataObject }))
-						);
+						outputItems.push(...parsed.map((p) => ({ json: p as IDataObject })));
 					} else {
 						outputItems.push({ json: parsed as IDataObject });
 					}
@@ -308,18 +308,18 @@ export class RespondToPrivateWorkflow implements INodeType {
 				case 'text': {
 					const text = String(this.getNodeParameter('responseText', 0));
 					payload = text;
-					encoding = "text";
+					encoding = 'text';
 
 					// workflow output: keep it JSON-safe
 					outputItems.push({
-						json: { "text": text },
+						json: { text: text },
 					});
 
 					break;
 				}
 
 				case 'binary': {
-					encoding = "base64";
+					encoding = 'base64';
 					const binaryMode = this.getNodeParameter('binaryMode', 0) as string;
 
 					let binaryData;
@@ -338,7 +338,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 					if (!binaryData || !binaryPropertyName) {
 						this.logger?.warn?.(
-							`[RespondToPrivateWorkflow] No binary data for correlation=${correlationId}`
+							`[RespondToPrivateWorkflow] No binary data for correlation=${correlationId}`,
 						);
 
 						payload = null;
@@ -346,7 +346,6 @@ export class RespondToPrivateWorkflow implements INodeType {
 						outputItems.push({
 							json: { correlationId, status: 'Success' },
 						});
-
 					} else {
 						// Extract the binary base64 code as n8n expects
 						payload = binaryData.data;
@@ -365,10 +364,10 @@ export class RespondToPrivateWorkflow implements INodeType {
 				case 'none':
 				default:
 					payload = null;
-					encoding = "json";
-						outputItems.push({
-							json: { correlationId, status: 'Success' },
-						});
+					encoding = 'json';
+					outputItems.push({
+						json: { correlationId, status: 'Success' },
+					});
 					break;
 			}
 
@@ -411,11 +410,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			// Build serialized payload value
 			// ------------------------------------------------------------------------------------
 			const serializedValue =
-				payload == null
-					? ''
-					: typeof payload === 'string'
-						? payload
-						: JSON.stringify(payload);
+				payload == null ? '' : typeof payload === 'string' ? payload : JSON.stringify(payload);
 
 			const payloadLength =
 				encoding === 'base64'
@@ -426,9 +421,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			// Decide transport: inline vs reference (Respond node)
 			// ------------------------------------------------------------------------------------
 			const useReference =
-				hubInfo.useStorage &&
-				payloadLength > hubInfo.maxPayload &&
-				!!hubInfo.blobStorageUrl;
+				hubInfo.useStorage && payloadLength > hubInfo.maxPayload && !!hubInfo.blobStorageUrl;
 
 			// ------------------------------------------------------------------------------------
 			// Build canonical PrivateWorkflowPayload for hub
@@ -436,7 +429,6 @@ export class RespondToPrivateWorkflow implements INodeType {
 			let hubPayload: PrivateWorkflowPayload;
 
 			if (useReference) {
-
 				// Build the buffer to upload based on encoding
 				const buffer =
 					encoding === 'base64'
@@ -476,10 +468,8 @@ export class RespondToPrivateWorkflow implements INodeType {
 				};
 
 				this.logger?.info?.(
-					`[RespondToPrivateWorkflow] Payload uploaded (${payloadLength} bytes) → ${uploadResult.url}`
+					`[RespondToPrivateWorkflow] Payload uploaded (${payloadLength} bytes) → ${uploadResult.url}`,
 				);
-
-
 			} else {
 				hubPayload = {
 					type: 'inline',
@@ -494,7 +484,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			// Send a single response to the hub AFTER collecting payload
 			// ------------------------------------------------------------------------------------
 			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] Sending response → corr=${correlationId}, mode=${respondWith}`
+				`[RespondToPrivateWorkflow] Sending response → corr=${correlationId}, mode=${respondWith}`,
 			);
 			const completedResponse: PrivateWorkflowResponse = {
 				correlationId,
@@ -513,15 +503,11 @@ export class RespondToPrivateWorkflow implements INodeType {
 				json: true,
 			});
 
-			this.logger?.info?.(
-				`[RespondToPrivateWorkflow] Response sent (corr=${correlationId})`
-			);
+			this.logger?.info?.(`[RespondToPrivateWorkflow] Response sent (corr=${correlationId})`);
 
 			// Return items to workflow
 			return [outputItems];
-		}
-		catch(err)
-		{
+		} catch (err) {
 			// 1️⃣ Send failure to hub (best effort)
 			try {
 				const failureMessage = err instanceof Error ? err.message : String(err);
@@ -548,13 +534,9 @@ export class RespondToPrivateWorkflow implements INodeType {
 					body: failedResponse,
 					json: true,
 				});
-			}
-			catch (hubErr) {
+			} catch (hubErr) {
 				// Never let hub failures mask the real error
-				this.logger.error(
-					'[RespondToPrivateWorkflow] Failed to report error to hub',
-					hubErr
-				);
+				this.logger.error('[RespondToPrivateWorkflow] Failed to report error to hub', hubErr);
 			}
 
 			// 2️⃣ Now fail the node properly
@@ -564,7 +546,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 			throw new NodeOperationError(
 				this.getNode(),
-				err instanceof Error ? err.message : String(err)
+				err instanceof Error ? err.message : String(err),
 			);
 		}
 	}

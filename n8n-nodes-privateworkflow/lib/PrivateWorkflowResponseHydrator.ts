@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { INodeExecutionData } from 'n8n-workflow';
 import { IN8nHttpHelper } from './N8nHttpHelper';
 import { PrivateWorkflowPayload } from './PrivateWorkflowPayload';
@@ -18,12 +17,12 @@ export interface HydrationResult {
 export class PrivateWorkflowResponseHydrator {
 
 	static async hydrate(
-		body: any,
+		body: Record<string, unknown>,
 		options: HydrationOptions = {}
 	): Promise<HydrationResult> {
 
 		const binaryKey = options.binaryPropertyName ?? 'file';
-		const status: string | undefined = body?.status;
+		const status: string | undefined = body?.status as string | undefined;
 
 		if (!status) {
 			throw new Error('Response missing status');
@@ -46,7 +45,7 @@ export class PrivateWorkflowResponseHydrator {
 			throw new Error(`Unknown workflow status: ${status}`);
 		}
 
-		let payload: PrivateWorkflowPayload | undefined = body?.payload;
+		let payload: PrivateWorkflowPayload | undefined = body?.payload as PrivateWorkflowPayload | undefined;
 
 		// ------------------------------------------------------------
 		// No payload
@@ -103,7 +102,7 @@ export class PrivateWorkflowResponseHydrator {
 		// JSON encoding
 		// ------------------------------------------------------------
 		if (encoding === 'json') {
-			let parsed: any;
+			let parsed: unknown;
 			try {
 				parsed = JSON.parse(payload.value);
 			} catch {
@@ -113,7 +112,7 @@ export class PrivateWorkflowResponseHydrator {
 			if (Array.isArray(parsed)) {
 				return {
 					state: 'completed',
-					items: parsed.map((element) => ({
+					items: (parsed as Record<string, unknown>[]).map((element) => ({
 						json: { status, ...(element ?? {}) },
 					})),
 				};
@@ -121,7 +120,7 @@ export class PrivateWorkflowResponseHydrator {
 
 			return {
 				state: 'completed',
-				items: [{ json: { status, ...(parsed ?? {}) } }],
+				items: [{ json: { status, ...((parsed as Record<string, unknown>) ?? {}) } }],
 			};
 		}
 

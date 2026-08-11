@@ -8,6 +8,12 @@
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
 import { setTimeout as setTimeoutPromise } from 'timers/promises';
 
+const INVOCATION_TIMEOUT_MS = 30_000;
+const KEEP_ALIVE_INTERVAL_MS = 15_000;
+const SERVER_TIMEOUT_CHECK_INTERVAL_MS = 5_000;
+const QUICK_RETRY_4S_COUNT = 8;
+const QUICK_RETRY_8S_COUNT = 8;
+
 // -------------------------------------------------------------------------
 // 2. Microsoft SignalR Enums
 // -------------------------------------------------------------------------
@@ -130,7 +136,7 @@ export class HubConnection {
         const timeoutAbortController = new AbortController();
 
         // Race between timeout and actual response
-        const timeoutPromise = setTimeoutPromise(30000, undefined, { signal: timeoutAbortController.signal })
+        const timeoutPromise = setTimeoutPromise(INVOCATION_TIMEOUT_MS, undefined, { signal: timeoutAbortController.signal })
             .then(() => {
                 // Timeout fired - clean up and reject if still pending
                 if (this.pendingInvocations.has(invId)) {
@@ -335,8 +341,8 @@ export class HubConnection {
         const startTime = Date.now();
         let delay = 0; // first attempt is immediate
         let failedAttempts = 0;
-        const quickRetry4sCount = 8;
-        const quickRetry8sCount = 8;
+        const quickRetry4sCount = QUICK_RETRY_4S_COUNT;
+        const quickRetry8sCount = QUICK_RETRY_8S_COUNT;
 
         while (!this.isStopped) {
             if (delay > 0) {
@@ -442,7 +448,7 @@ export class HubConnection {
         this.keepAliveAbortController = new AbortController();
         (async () => {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            for await (const _ of this.createInterval(15000, this.keepAliveAbortController!.signal)) {
+            for await (const _ of this.createInterval(KEEP_ALIVE_INTERVAL_MS, this.keepAliveAbortController!.signal)) {
                 if (this.socket?.readyState === WebSocket.OPEN) {
                     try {
                         this.socket.send(`{"type":6}\x1e`);
@@ -457,7 +463,7 @@ export class HubConnection {
         this.serverTimeoutCheckAbortController = new AbortController();
         (async () => {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            for await (const _ of this.createInterval(5000, this.serverTimeoutCheckAbortController!.signal)) {
+            for await (const _ of this.createInterval(SERVER_TIMEOUT_CHECK_INTERVAL_MS, this.serverTimeoutCheckAbortController!.signal)) {
                 if (this.isStopped) return;
                 if (this.socket?.readyState !== WebSocket.OPEN) return;
 

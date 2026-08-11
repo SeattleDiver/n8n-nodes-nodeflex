@@ -203,6 +203,11 @@ If the wait times out or you prefer asynchronous checking:
 
 ## Version history
 
+### 0.1.1
+
+- Code quality improvements: removed unused code, tightened TypeScript types, extracted named constants
+- Added description for text payload parameter in Execute Private Workflow node
+
 ### 0.1.0
 
 Initial release with four nodes:
