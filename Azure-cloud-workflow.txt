@@ -1,6 +1,0 @@
-Azure cloud-workflow
-
-Resource Group	cloud-workflow
-SQL Server		cloud-workflow-sql
-Username		btryon
-Password		jB3ovm0Ufd0221
