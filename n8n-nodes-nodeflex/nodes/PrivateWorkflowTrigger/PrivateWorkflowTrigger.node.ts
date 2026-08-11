@@ -1,33 +1,33 @@
-// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
-import { setTimeout as setTimeoutPromise } from 'timers/promises';
-import {
-	ITriggerFunctions,
+import type {
+	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	ITriggerFunctions,
 	ITriggerResponse,
-	NodeOperationError,
-	INodeExecutionData,
 } from 'n8n-workflow';
+import { NodeOperationError } from 'n8n-workflow';
+// eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
+import { setTimeout as setTimeoutPromise } from 'timers/promises';
 
-import { SignalRPrivateWorkflowClient } from '../../lib/SignalRPrivateWorkflowClient';
-import { HubProfileService } from '../../lib/HubProfileService';
 import { HUB_BASE_URL } from '../../lib/HubConfig';
+import { HubProfileService } from '../../lib/HubProfileService';
 import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
-import { WorkflowHubService } from '../../lib/WorkflowHubService';
 import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
+import { SignalRPrivateWorkflowClient } from '../../lib/SignalRPrivateWorkflowClient';
+import { WorkflowHubService } from '../../lib/WorkflowHubService';
 
 export class PrivateWorkflowTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Private Workflow Trigger',
 		name: 'privateWorkflowTrigger',
+		icon: 'file:icon.svg',
 		group: ['trigger'],
-		usableAsTool: true,
 		version: 1,
 		description: 'When a remote private workflow is executed',
-		icon: 'file:icon.svg',
 		defaults: {
 			name: 'Private Workflow Trigger',
 		},
+		usableAsTool: true,
 		inputs: [],
 		outputs: ['main'],
 		credentials: [
@@ -95,9 +95,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 		],
 	};
 
-	// ------------------------------------------------------------------------------------------------------------------------------------------------
 	// trigger is called when n8n runs the workflow trigger
-	// ------------------------------------------------------------------------------------------------------------------------------------------------
 	async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
 		const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
 		const hubBase = HUB_BASE_URL;
@@ -128,9 +126,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 		let hubPath = '';
 		let hubInfo: WorkflowHubService | null = null;
 
-		// -----------------------------------------------------------------------
 		// Two-phase retry budget (applies to entire activation: hub fetch + connect)
-		// -----------------------------------------------------------------------
 		const RETRY_MAX_DURATION_MS = 28_800_000; // 8 hours
 		const RETRY_INITIAL_DELAY_MS = 2_000;
 		const RETRY_PHASE1_CAP_MS = 60_000; // 60s cap during phase 1
@@ -138,10 +134,8 @@ export class PrivateWorkflowTrigger implements INodeType {
 		const RETRY_PHASE2_INTERVAL_MS = 900_000; // 15 minutes
 		const MANUAL_WAIT_TIMEOUT_MS = 60_000; // 60s timeout for manual test runs
 
-		// -----------------------------------------------------------------------
 		// connectToHub: fetches hub info, creates client, and starts connection.
 		// Throws on any failure so the retry loop can catch and retry.
-		// -----------------------------------------------------------------------
 		const connectToHub = async () => {
 			const hubService = new HubProfileService(hubBase, http);
 			hubInfo = await hubService.getHubInfo(apiKey);
@@ -182,11 +176,8 @@ export class PrivateWorkflowTrigger implements INodeType {
 					error: (m, ...a) => this.logger.error(m, ...a),
 				},
 
-				// -------------------------------------------------------------------------------------------------------------------------------------------
-				// onExecute is called when the SignalR connection receives a message from the hub
-				//   The payload may be encrypted. If we have a privateKey defined, then we must decrypt
-				//   the payload before we use it
-				// -------------------------------------------------------------------------------------------------------------------------------------------
+				// onExecute is called when the SignalR connection receives a message from the hub.
+				// The payload may be encrypted; if a privateKey is defined it must be decrypted before use.
 				// eslint-disable-next-line @typescript-eslint/no-unused-vars
 				onExecute: async ({ request, inlineJson, inlineText, payload: _payload }) => {
 					this.logger.info(`[PrivateWorkflowTrigger] onExecute()`);
@@ -224,9 +215,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 						// Decode the workflow request payload
 						const wfPayload = request.payload as PrivateWorkflowPayload;
 
-						// ------------------------------------------------------------
 						// Normalize reference payload → inline payload
-						// ------------------------------------------------------------
 						let normalizedPayload = wfPayload;
 
 						this.logger.info(`[PrivateWorkflowTrigger] payloadType = ${wfPayload.type}`);
@@ -311,15 +300,11 @@ export class PrivateWorkflowTrigger implements INodeType {
 							Object.assign(outItem.json, jsonValue);
 						}
 
-						// ------------------------------------------------------------
 						// Start the workflow by emitting the outItem
-						// ------------------------------------------------------------
 						this.emit([[outItem]]);
 
 						switch (respondMode) {
-							// ------------------------------------------------------------------------------------------------
-							// 1️⃣ Respond Immediately
-							// ------------------------------------------------------------------------------------------------
+							// Respond immediately
 							case 'immediately': {
 								this.logger.info('[PrivateWorkflowTrigger] Sending immediate response to hub...');
 
@@ -371,13 +356,11 @@ export class PrivateWorkflowTrigger implements INodeType {
 									);
 								}
 
-								// ✅ Do NOT return an object — this tells n8n we are done
+								// Do NOT return an object — this tells n8n we are done
 								return;
 							}
 
-							// ------------------------------------------------------------------------------------
-							// 2️⃣ RESPOND TO PRIVATE WORKFLOW
-							// ------------------------------------------------------------------------------------
+							// Deferred response, handled by the Respond to Private Workflow node
 							case 'respondToPrivateWorkflow': {
 								this.logger.info(
 									`[PrivateWorkflowTrigger] Deferred response mode active for correlationId=${correlationId} (requestId=${requestId})`,
@@ -385,9 +368,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 								return;
 							}
 
-							// ------------------------------------------------------------------------------------------------
 							// Default fallback
-							// ------------------------------------------------------------------------------------------------
 							default: {
 								this.logger.warn(`Unknown respond mode: ${respondMode}`);
 								this.emit([this.helpers.returnJsonArray([base])]);
@@ -410,8 +391,8 @@ export class PrivateWorkflowTrigger implements INodeType {
 					}
 
 					// Properly propagate the error to n8n so the trigger terminates
-					const error = err instanceof Error ? err : new Error(String(err));
-					throw new NodeOperationError(this.getNode(), error);
+					const message = err instanceof Error ? err.message : String(err);
+					throw new NodeOperationError(this.getNode(), message);
 				},
 
 				onConnectionLost: async (err: unknown) => {
@@ -455,9 +436,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 			started = true;
 		};
 
-		// -----------------------------------------------------------------------
 		// ensureStarted: idempotent activation with two-phase retry
-		// -----------------------------------------------------------------------
 		const ensureStarted = async () => {
 			if (started) return;
 			if (!startingPromise) {
@@ -545,9 +524,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 			}
 		};
 
-		//
-		// Manual execution in the editor:
-		//
+		// Manual execution in the editor
 		const manualTriggerFunction = async () => {
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const anyThis = this as any;
@@ -605,10 +582,7 @@ export class PrivateWorkflowTrigger implements INodeType {
 				return;
 			}
 
-			// ---------------------------------------------------------
-			// Normal workflow mode: do nothing special here
-			// (onExecute + Respond Node handle everything)
-			// ---------------------------------------------------------
+			// Normal workflow mode: do nothing special here (onExecute + Respond Node handle everything)
 			this.logger.info('[WorkflowMode] Workflow run — trigger standing by.');
 		};
 

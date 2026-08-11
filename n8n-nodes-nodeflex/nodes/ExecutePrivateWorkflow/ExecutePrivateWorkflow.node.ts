@@ -1,35 +1,35 @@
-import {
+import { randomUUID } from 'crypto';
+
+import type {
 	IExecuteFunctions,
 	IHttpRequestOptions,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
-	NodeOperationError,
 } from 'n8n-workflow';
+import { NodeOperationError } from 'n8n-workflow';
 
-import { randomUUID } from 'crypto';
-
+import { HUB_BASE_URL } from '../../lib/HubConfig';
 import { HubProfileService } from '../../lib/HubProfileService';
-import { WorkflowHubService } from '../../lib/WorkflowHubService';
+import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
+import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 import { PrivateWorkflowRequest } from '../../lib/PrivateWorkflowRequest';
 import { PrivateWorkflowResponseHydrator } from '../../lib/PrivateWorkflowResponseHydrator';
-import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
+import { WorkflowHubService } from '../../lib/WorkflowHubService';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
-import { HUB_BASE_URL } from '../../lib/HubConfig';
-import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
 
 export class ExecutePrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Execute Private Workflow',
 		name: 'executePrivateWorkflow',
+		icon: 'file:icon.svg',
 		group: ['transform'],
 		version: 1,
 		description: 'Run a remote private workflow',
-		usableAsTool: true,
 		defaults: {
 			name: 'Execute Private Workflow',
 		},
-		icon: 'file:icon.svg',
+		usableAsTool: true,
 		inputs: ['main'],
 		outputs: ['main', 'main'],
 		outputNames: ['Acknowledged', 'Completed'],
@@ -176,16 +176,14 @@ export class ExecutePrivateWorkflow implements INodeType {
 		const ackData: INodeExecutionData[] = [];
 		const completedData: INodeExecutionData[] = [];
 
-		// Get credentials (keep existing behavior)
+		// Get credentials
 		const creds = await this.getCredentials('privateWorkflowApi');
 		const apiKey = creds.apiKey as string;
 		const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-				// ------------------------------------------------------------
-				// Get the hubBase, extract the hubProfile and setup all the URL's and profile parameters
-				// ------------------------------------------------------------
+				// Resolve the execution hub and its URLs/profile parameters
 				const hubBase = HUB_BASE_URL;
 				const hubService = new HubProfileService(hubBase, http);
 				let hubInfo: WorkflowHubService;
@@ -241,19 +239,14 @@ export class ExecutePrivateWorkflow implements INodeType {
 
 				this.logger.info('Hub endpoints resolved');
 
-				// Construct target URL (keep existing behavior)
+				// Construct target URL
 				const normalizedUrl = apiUrl.replace(/\/+$/, '');
 				const normalizedPath = hubPath.replace(/^\/+/, '');
 				const targetUrl = `${normalizedUrl}/${normalizedPath}`;
 
-				// ------------------------------------------------------------
-				// Process the item
-				// ------------------------------------------------------------
 				const item = items[i];
 
-				// ------------------------------------------------------------
-				// Extract new node parameters
-				// ------------------------------------------------------------
+				// Extract node parameters
 				const payloadType = this.getNodeParameter('payloadType', i) as 'json' | 'binary';
 
 				const waitForResponse = this.getNodeParameter('waitForResponse', i) as boolean;
@@ -262,9 +255,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 					waitTimeout = this.getNodeParameter('waitTimeout', i) as number;
 				}
 
-				// ------------------------------------------------------------
-				// Build the payload based on user-selected payloadType
-				// ------------------------------------------------------------
+				// Build the payload based on the selected payload type
 				let encodedPayload: string;
 				let payloadLength: number;
 				let payloadEncoding: 'json' | 'base64' | 'text' = 'json';
@@ -368,10 +359,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 					this.logger.info(`Encoded JSON payload (${payloadLength} bytes)`);
 				}
 
-				// ------------------------------------------------------------
-				// Decide payload transport (inline vs reference) - keep existing behavior
-				// (You said you want to "forget" this later; leaving it intact for now.)
-				// ------------------------------------------------------------
+				// Decide payload transport (inline vs reference)
 				const useReference = payloadLength > hubInfo.maxPayload && !!blobUrl;
 				let payload: PrivateWorkflowPayload;
 
@@ -411,9 +399,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 					};
 				}
 
-				// ------------------------------------------------------------
-				// Construct request (keep existing behavior)
-				// ------------------------------------------------------------
+				// Construct request
 				const request: PrivateWorkflowRequest = {
 					correlationId: randomUUID(),
 					requestId: randomUUID(),
@@ -452,9 +438,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 							})()
 						: rawBody;
 
-				// --------------------------------------------------------------------
-				// Output the responses (keep existing behavior)
-				// --------------------------------------------------------------------
+				// Handle the response
 				const statusCode = (response as Record<string, unknown>)?.statusCode;
 				if (typeof statusCode === 'number' && statusCode >= 500) {
 					throw new NodeOperationError(this.getNode(), `Hub error (${statusCode})`, {

@@ -1,29 +1,29 @@
-import {
+import type {
 	IExecuteFunctions,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
-	NodeOperationError,
 } from 'n8n-workflow';
+import { NodeOperationError } from 'n8n-workflow';
 
-import { HubProfileService } from '../../lib/HubProfileService';
 import { HUB_BASE_URL } from '../../lib/HubConfig';
+import { HubProfileService } from '../../lib/HubProfileService';
 import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
-import { WorkflowHubService } from '../../lib/WorkflowHubService';
 import { PrivateWorkflowResponseHydrator } from '../../lib/PrivateWorkflowResponseHydrator';
+import { WorkflowHubService } from '../../lib/WorkflowHubService';
 
 export class GetPrivateWorkflowResult implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Get Private Workflow Result',
 		name: 'getPrivateWorkflowResult',
+		icon: 'file:icon.svg',
 		group: ['input'],
-		usableAsTool: true,
 		version: 1,
 		description: 'Retrieves the current status or result of a Private Workflow execution',
-		icon: 'file:icon.svg',
 		defaults: {
 			name: 'Get Private Workflow Result',
 		},
+		usableAsTool: true,
 		inputs: ['main'],
 		outputs: ['main', 'main'],
 		outputNames: ['Completed', 'Pending'],
@@ -80,9 +80,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		const completed: INodeExecutionData[] = [];
 		const pending: INodeExecutionData[] = [];
 
-		// ------------------------------------------------------------
 		// Credentials
-		// ------------------------------------------------------------
 		const creds = (await this.getCredentials('privateWorkflowApi')) as {
 			apiKey?: string;
 		};
@@ -96,9 +94,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 
 		const apiKey = creds.apiKey;
 
-		// ------------------------------------------------------------
-		// Parameters (SINGLE-SHOT)
-		// ------------------------------------------------------------
+		// Parameters (single-shot, not per-item)
 		let correlationId = this.getNodeParameter('correlationId', 0) as string;
 		correlationId = correlationId.trim();
 
@@ -108,9 +104,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 		const continueOnPending = continueOn.includes('Pending');
 		const continueOnQueued = continueOn.includes('Queued');
 
-		// ------------------------------------------------------------
 		// Resolve execution hub via control plane
-		// ------------------------------------------------------------
 		const hubBase = HUB_BASE_URL;
 		const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
 		const hubService = new HubProfileService(hubBase, http);
@@ -150,9 +144,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 			throw new NodeOperationError(this.getNode(), 'Hub response missing status field');
 		}
 
-		// ------------------------------------------------------------
 		// Routing: non-Completed statuses
-		// ------------------------------------------------------------
 		const shouldContinue =
 			(status === 'Queued' && continueOnQueued) ||
 			(status === 'Running' && continueOnRunning) ||
@@ -172,9 +164,7 @@ export class GetPrivateWorkflowResult implements INodeType {
 			return [completed, pending];
 		}
 
-		// ------------------------------------------------------------
 		// Completed: decode payload (hydrator handles blob resolution)
-		// ------------------------------------------------------------
 		const result = await PrivateWorkflowResponseHydrator.hydrate(body, {
 			http,
 			apiKey,

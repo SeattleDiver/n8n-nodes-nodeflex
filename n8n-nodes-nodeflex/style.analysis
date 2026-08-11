@@ -1,0 +1,123 @@
+# n8n Node Style Analysis
+
+Source: https://github.com/n8n-io/n8n/blob/master/packages/nodes-base/nodes/Amqp/Amqp.node.ts
+
+## 1. File-Level Ordering
+
+The file is laid out top-to-bottom in this fixed sequence:
+
+1. Type-only imports from `n8n-workflow` (grouped in one `import type { ... } from 'n8n-workflow'`)
+2. Value imports from `n8n-workflow` (e.g. `NodeConnectionTypes`, `NodeOperationError`) — kept separate from the type-only import
+3. Type-only imports from third-party libraries (`rhea`)
+4. Value imports from third-party libraries (`create_container` from `rhea`)
+5. Local type imports (`./types`)
+6. Free-standing helper function(s) used by the node (e.g. `checkIfCredentialsValid`) — declared *before* the class, not nested inside it, when they're reusable across `execute` and `methods.credentialTest`
+7. The exported node class (`export class Amqp implements INodeType`)
+
+## 2. Import Style
+
+- `import type { ... }` is used religiously for anything that is purely a type (interfaces, type aliases) — never mixed into a value import.
+- Imports are grouped by source module, and within a module, types vs. values get separate `import`/`import type` statements.
+- Only what's actually used is imported — no wildcard imports.
+
+## 3. Class Structure (`implements INodeType`)
+
+The class body has a strict member order:
+
+1. `description: INodeTypeDescription = { ... }` — always first, always fully inline as an object literal (not built up conditionally).
+2. `methods = { credentialTest: { ... } }` — optional block, present only if the node supports credential testing.
+3. `async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> { ... }` — the actual runtime logic, always last.
+
+### `description` object field order
+
+Consistent, conventional ordering:
+`displayName` → `name` → `icon` → `group` → `version` → `description` → `defaults` → `usableAsTool` → `inputs` → `outputs` → `credentials` → `properties`
+
+- `properties` is always last and typically the largest/most nested block.
+- Within `properties`, related option groups are separated by a `// Comment` line naming the section (e.g. `// Header Parameters`) when a property groups multiple related fields, rather than a doc-comment.
+- Nested `collection`/`options` sub-fields (e.g. inside an "Options" collection) are alphabetized by `displayName` (Container ID, Data as Object, Reconnect, Reconnect Limit, Send Property).
+- Each property object follows the same key order: `displayName`, `name`, `type`, `default`, then optional keys like `placeholder`, `description`.
+
+## 4. Helper Functions
+
+- Pure/reusable logic (e.g. connection validation) is extracted to a top-level `async function` outside the class, typed explicitly (`Promise<INodeCredentialTestResult>`), and reused both by `methods.credentialTest` and inside `execute` (avoids duplicating connection logic just to "test" vs "run").
+- Helper functions use explicit parameter and return types — no inferred `any`.
+
+## 5. `execute()` Method Conventions
+
+- Declares mutable resources (`connection`, `sender`) as `let ... : Type | undefined = undefined;` before the `try` block, so they're accessible in `finally`.
+- Wraps the entire body in `try / catch / finally`:
+  - `catch`: checks `this.continueOnFail()` and returns a partial-failure result shape (`[[{ json: { error: error.message }, pairedItems: {...} }]]`) instead of throwing, when the user opted into continue-on-fail; otherwise rethrows.
+  - `finally`: always cleans up open resources (closes sender/connection) regardless of success/failure.
+- Parameters are pulled out at the top of the function body via `this.getNodeParameter(name, itemIndex, default)`, immediately cast with `as Type`.
+- Casts use the pattern `(value as boolean) || defaultValue` for options with fallback defaults, and `value ? value : undefined` for optional passthrough fields.
+- Long-running/async operations that rely on event-driven APIs (rhea's `container.on(...)`) are bridged into `Promise`-based control flow via `new Promise<T>((resolve, reject) => { ... })`, keeping the rest of the method `async/await`-based rather than callback-based.
+- Errors are raised via `new NodeOperationError(this.getNode(), message, { description, itemIndex })` — never a bare `throw new Error(...)` — so n8n can attribute the error to the right node/item and show a helpful `description` hint.
+- Inline comments are sparse and only explain *why*, not *what* (e.g. `// handling this manually as container, despite reconnect_limit, does reconnect on disconnect`).
+- A multi-line `/* ... */` comment is used once to point to external reference docs for a config shape that isn't self-explanatory (rhea's `container` options).
+- Iterates input items with a plain indexed `for` loop (`for (let i = 0; i < items.length; i++)`) when the index is needed for `pairedItems: { item: i }`.
+- Return shape is always `INodeExecutionData[][]` — a single output branch wraps `responseData` as `[responseData]`.
+
+## 6. Formatting/Naming
+
+- Tabs for indentation.
+- camelCase for variables/functions, PascalCase for the class and imported types.
+- Boolean-returning/checking helpers and options read naturally as English (`containerReconnect`, `dataAsObject`, `sendOnlyProperty`).
+- Type assertions (`as string`, `as number`, `as boolean`) are used heavily at the boundary where `getNodeParameter`/`IDataObject` values (typed loosely) are narrowed into concrete types for use.
+
+## 7. Cross-File Correlation — AwsCertificateManager.node.ts
+
+Compared against: https://github.com/n8n-io/n8n/blob/master/packages/nodes-base/nodes/Aws/CertificateManager/AwsCertificateManager.node.ts
+
+### Confirmed (same pattern in both files)
+
+- **Import grouping**: `import type { ... } from 'n8n-workflow'` block first, then a separate `import { NodeConnectionTypes } from 'n8n-workflow'` for values — identical split in both files.
+- **Local imports last**, grouped by originating file (`./CertificateDescription`, `./GenericFunctions`, `../utils`) — mirrors Amqp's "local type imports last" slot, just with value imports since there's no local type file here.
+- **Class member order**: `description` object always declared first; `execute()` always last. (This file has no `methods` block, consistent with it being optional per Amqp's analysis.)
+- **`description` field order**: `displayName → name → icon → group → version → description → defaults → inputs → outputs → credentials → properties` — same backbone order as Amqp, with `subtitle` inserted between `version` and `description` (an optional field, not a reordering) and no `usableAsTool`.
+- **`// Comment` section headers inside `properties`**: `// Certificate` labels the resource-specific property block, same convention as Amqp's `// Header Parameters`.
+- **Indexed `for` loop over `items`** (`for (let i = 0; i < items.length; i++)`) to access per-item parameters — identical iteration style.
+- **Type assertions at the parameter boundary** (`as string`, `as string[]`, `as IDataObject`) immediately after `this.getNodeParameter(...)` — same narrowing convention.
+- **`this.continueOnFail()` check inside `catch`** to decide whether to swallow the error into `returnData` or rethrow — same branching logic, though the resulting shape differs (see below).
+- **Inline comments explain external/non-obvious context, not "what"** — here it's a `//https://docs.aws...` reference link above each operation branch, functionally the same role as Amqp's block comment pointing to the rhea container docs.
+- **Tabs, camelCase/PascalCase, `INodeExecutionData[][]` return type, single `[returnData]`/`[responseData]` output branch.**
+
+### New pattern introduced here (not present in Amqp, but idiomatic n8n)
+
+- **Resource/operation dispatch pattern**: a `resource` (and here implicitly `operation`) parameter drives `if (resource === 'x')` / `if (operation === 'y')` branching inside the single `execute()` loop, instead of Amqp's single-purpose action. This is the standard shape for any node exposing more than one API resource/action.
+- **Operation/field definitions extracted to sibling files** (`CertificateDescription.ts`) and spread into `properties` (`...certificateOperations`, `...certificateFields`) rather than declared inline — used once a node has enough operations that inlining would bloat the class.
+- **`this.helpers.constructExecutionMetaData(this.helpers.returnJsonArray(...), { itemData: { item: i } })`** is the preferred way to build paired output items when wrapping a plain API response, versus Amqp's fully manual `{ json: {...}, pairedItems: {...} }` (Amqp's manual form appears when the shape is simple/one-off; the helper is used once responses come straight from an HTTP call).
+
+### Divergence (does not generalize — context-dependent)
+
+- **Error handling call**: Amqp raises via `NodeOperationError(this.getNode(), message, { description, itemIndex })`; this file just does a bare `throw error` / pushes `error.message` directly. Not a contradiction of a "rule" — Amqp's custom error is used where it authors a novel error condition (e.g. validation failure), while this file simply re-surfaces whatever the AWS API call threw.
+- **try/catch scope**: Amqp wraps the whole `execute()` body once (single logical operation, needs `finally` cleanup of a connection/sender); this file wraps the loop body per-item (multi-item, no external resource to clean up, so no `finally` needed) — confirms the earlier analysis was AMQP-specific on this point, not a general n8n convention.
+
+## 8. Cross-File Correlation — FacebookTrigger.node.ts
+
+Compared against: https://github.com/n8n-io/n8n/blob/master/packages/nodes-base/nodes/Facebook/FacebookTrigger.node.ts (a **trigger** node, unlike the two prior **action** nodes)
+
+### Confirmed across all three files (high-confidence n8n-wide conventions)
+
+- **Import ordering is alphabetical by module specifier, package imports before relative imports**: `change-case` → `crypto` → `n8n-workflow` → `./GenericFunctions` / `./types`. This is the clearest signal yet (3/3 files agree) that imports are sorted alphabetically by source module — not just "n8n-workflow first" as originally guessed from Amqp alone. External/built-in packages sort ahead of `n8n-workflow` only because their names are alphabetically earlier (`change-case`, `crypto` < `n8n-workflow`); Amqp's `rhea` sorted *after* `n8n-workflow` for the same reason. Relative (`./...`) imports are always last regardless.
+- **Type vs. value imports are still split** per module (`import type {...} from 'n8n-workflow'` then `import {...} from 'n8n-workflow'`), and a local `./types` file exported via `import type` — exact same shape as Amqp's `import type { AmqpCredential } from './types'`.
+- **API-calling logic lives in a sibling `./GenericFunctions` file**, imported as plain value imports (`facebookApiRequest`, `getAllFields`, `getFields`) — identical filename and role to AwsCertificateManager's `./GenericFunctions`. Confirms "GenericFunctions.ts" as the conventional name for a node's HTTP/client helper module once logic outgrows inline helpers (Amqp's simpler `checkIfCredentialsValid` stayed inline because it had nowhere else to live yet).
+- **`description` backbone order holds**: `displayName → name → icon → group → version → subtitle → description → defaults → inputs → outputs → [builderHint] → credentials → [webhooks] → properties`. New optional fields (`builderHint`, `webhooks`) slot into the same middle region between `outputs` and `properties` without disturbing the established order — same behavior as `subtitle` in AwsCertificateManager.
+- **Class member order still "config objects first, runtime logic last"**: `description` → `methods` → (trigger-only) `webhookMethods` → the runtime entry point (here `webhook()`, playing the same terminal-position role `execute()` plays in the other two files).
+- **`methods = { <category>: { asyncFnName(this: SomeFunctions) {...} } }` shape recurs a third time** — Amqp used `methods.credentialTest`, this file uses `methods.loadOptions`. Same nesting convention for any n8n-recognized method category.
+- **Domain-specific n8n error classes only, never bare `Error`**: adds `NodeApiError` (for API-shaped failures) alongside `NodeOperationError`, both still constructed as `new XError(this.getNode(), payload, { ...options })` — confirms the pattern generalizes beyond the single error class Amqp used.
+- **Sparse, "why not what" comments**, including inline links to the vendor's own docs for non-obvious behavior (`// Check if we're getting facebook's challenge request (https://developers.facebook.com/...)`), matching Amqp's rhea-docs block comment and AwsCertificateManager's per-operation `//https://docs.aws...` links.
+- **Explicit return types on every method** (`Promise<boolean>`, `Promise<INodePropertyOptions[]>`, `Promise<IWebhookResponseData>`) — same discipline as Amqp's helper function and both files' `execute()`.
+- **Type assertions at parameter/data boundaries** (`this.getNodeParameter(...) as string`, `query as IDataObject`) — still the standard narrowing idiom.
+
+### New pattern introduced here (trigger-node archetype, not seen in action nodes)
+
+- **No `execute()` at all.** Trigger nodes instead implement `webhookMethods.default.{checkExists, create, delete}` (webhook subscription lifecycle, each returning `Promise<boolean>`) plus a top-level `async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData>` that handles the actual inbound HTTP call. `webhookMethods` sits as its own top-level class property (sibling to `methods`), not nested inside `methods`.
+- **`webhooks: [...]` array in `description`** declares the HTTP endpoints the node exposes (`setup`/GET for verification, `default`/POST for events) — a trigger-only description field.
+- **`builderHint.searchHint`** — a free-text field aimed at n8n's AI workflow-builder, clarifying non-obvious setup behavior (here: the webhook verify-token is the node's own auto-generated ID, not a user-supplied secret). Not present in either action node; appears to be a newer/optional description field for nodes with steps an AI builder could easily get wrong.
+- **Lifecycle methods swallow errors differently depending on intent**: `delete()` catches and returns `false` on any failure (best-effort cleanup, no `continueOnFail` concept since there's no "item" being processed) instead of the `continueOnFail()` branching used in both action nodes' `execute()`. Confirms `continueOnFail()` is specifically an `execute()`/item-processing concern, not a universal error-handling rule.
+- **`getCurrentNodeParameter`** (inside `methods.loadOptions.getObjectFields`) vs. `getNodeParameter` elsewhere — a distinct accessor used specifically when populating dynamic dropdown options from the parameter panel's live (unsaved) state.
+
+### Divergence / context-dependent (not contradictions)
+
+- Facebook's `webhook()` builds its response manually (`res.status(200).type(...).send(...).end()`, or `{ workflowData: [...] }`) rather than returning `INodeExecutionData[][]` — expected, since trigger nodes answer an inbound HTTP request/emit workflow data on trigger, not process a batch of input items like action nodes' `execute()`.

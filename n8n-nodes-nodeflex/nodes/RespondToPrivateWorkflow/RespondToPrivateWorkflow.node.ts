@@ -1,33 +1,34 @@
-import {
+import type {
+	IDataObject,
 	IExecuteFunctions,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
-	IDataObject,
-	NodeOperationError,
 } from 'n8n-workflow';
+import { NodeOperationError } from 'n8n-workflow';
+
+import { HUB_BASE_URL } from '../../lib/HubConfig';
+import { HubProfileService } from '../../lib/HubProfileService';
+import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
 import {
 	PrivateWorkflowPayload,
 	PrivateWorkflowPayloadEncoding,
 } from '../../lib/PrivateWorkflowPayload';
 import { PrivateWorkflowResponse } from '../../lib/PrivateWorkflowResponse';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
-import { IN8nHttpHelper } from '../../lib/N8nHttpHelper';
-import { HubProfileService } from '../../lib/HubProfileService';
-import { HUB_BASE_URL } from '../../lib/HubConfig';
 
 export class RespondToPrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Respond to Private Workflow',
 		name: 'respondToPrivateWorkflow',
+		icon: 'file:icon.svg',
 		group: ['output'],
 		version: 1,
 		description: 'Sends a response back to the Private Workflow Trigger',
-		usableAsTool: true,
-		icon: 'file:icon.svg',
 		defaults: {
 			name: 'Respond to Private Workflow',
 		},
+		usableAsTool: true,
 		inputs: ['main'],
 		outputs: ['main'],
 		credentials: [
@@ -78,7 +79,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 				],
 			},
 
-			// ---------- JSON Response ----------
+			// JSON Response
 			{
 				displayName: 'Response Body',
 				name: 'responseData',
@@ -95,7 +96,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 				},
 			},
 
-			// ---------- Text Response ----------
+			// Text Response
 			{
 				displayName: 'Response Text',
 				name: 'responseText',
@@ -113,7 +114,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 				},
 			},
 
-			// ---------- Binary Source Mode ----------
+			// Binary Source Mode
 			{
 				displayName: 'Response Data Source',
 				name: 'binaryMode',
@@ -227,7 +228,6 @@ export class RespondToPrivateWorkflow implements INodeType {
 				case 'firstItem': {
 					// Reuse allItems logic
 					if (items.length === 0) {
-						//payload = null;
 						outputItems.push({ json: {} });
 						break;
 					}
@@ -371,9 +371,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 					break;
 			}
 
-			// ------------------------------------------------------------------------------------
 			// Cleanup internal fields (__correlationId)
-			// ------------------------------------------------------------------------------------
 
 			// Clean workflow output items
 			for (let i = 0; i < outputItems.length; i++) {
@@ -406,9 +404,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 				payload = clean;
 			}
 
-			// ------------------------------------------------------------------------------------
 			// Build serialized payload value
-			// ------------------------------------------------------------------------------------
 			const serializedValue =
 				payload == null ? '' : typeof payload === 'string' ? payload : JSON.stringify(payload);
 
@@ -417,15 +413,11 @@ export class RespondToPrivateWorkflow implements INodeType {
 					? Buffer.byteLength(serializedValue, 'base64')
 					: Buffer.byteLength(serializedValue, 'utf8');
 
-			// ------------------------------------------------------------------------------------
 			// Decide transport: inline vs reference (Respond node)
-			// ------------------------------------------------------------------------------------
 			const useReference =
 				hubInfo.useStorage && payloadLength > hubInfo.maxPayload && !!hubInfo.blobStorageUrl;
 
-			// ------------------------------------------------------------------------------------
 			// Build canonical PrivateWorkflowPayload for hub
-			// ------------------------------------------------------------------------------------
 			let hubPayload: PrivateWorkflowPayload;
 
 			if (useReference) {
@@ -461,7 +453,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 				// Build reference payload
 				hubPayload = {
 					type: 'reference',
-					value: uploadResult.url, // ✅ THIS IS THE URL YOU WANTED
+					value: uploadResult.url,
 					encoding,
 					isEncrypted: false,
 					length: payloadLength,
@@ -480,9 +472,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 				};
 			}
 
-			// ------------------------------------------------------------------------------------
-			// Send a single response to the hub AFTER collecting payload
-			// ------------------------------------------------------------------------------------
+			// Send a single response to the hub after collecting the payload
 			this.logger?.info?.(
 				`[RespondToPrivateWorkflow] Sending response → corr=${correlationId}, mode=${respondWith}`,
 			);
@@ -508,7 +498,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 			// Return items to workflow
 			return [outputItems];
 		} catch (err) {
-			// 1️⃣ Send failure to hub (best effort)
+			// Send failure to hub (best effort)
 			try {
 				const failureMessage = err instanceof Error ? err.message : String(err);
 				const failurePayload: PrivateWorkflowPayload = {
@@ -539,7 +529,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 				this.logger.error('[RespondToPrivateWorkflow] Failed to report error to hub', hubErr);
 			}
 
-			// 2️⃣ Now fail the node properly
+			// Now fail the node properly
 			if (err instanceof NodeOperationError) {
 				throw err;
 			}
