@@ -9,7 +9,7 @@ NodeFlex Private Workflow enables real-time, bidirectional workflow execution ac
 
 [Installation](#installation)
 [How It Works](#how-it-works)
-[Nodes](#nodes)
+[Operations](#operations)
 [Credentials](#credentials)
 [Compatibility](#compatibility)
 [Usage](#usage)
@@ -115,7 +115,7 @@ For payloads between 64 KB and 10 MB that use blob storage:
 
 > **Note:** Payloads larger than 10 MB are not supported by the hub. For these cases, you must store the data in your own external storage (e.g., Google Drive, Amazon S3, Azure Blob Storage) and pass a reference (such as a URL or file ID) as the payload. The receiving workflow can then retrieve the data using the appropriate n8n node for that storage service.
 
-## Nodes
+## Operations
 
 This package contains four nodes that work together:
 
