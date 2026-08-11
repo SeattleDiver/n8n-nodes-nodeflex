@@ -5,7 +5,7 @@ import type {
 	IHttpRequestMethods,
 } from 'n8n-workflow';
 
-import { HUB_VERIFY_URL } from '../lib/HubConfig';
+import { HUB_VERIFY_URL, PORTAL_URL } from '../lib/HubConfig';
 
 export class PrivateWorkflowApi implements ICredentialType {
 	name = 'privateWorkflowApi';
@@ -16,6 +16,12 @@ export class PrivateWorkflowApi implements ICredentialType {
 
 	// The standard n8n properties definition
 	properties: INodeProperties[] = [
+		{
+			displayName: `Get your API key from <a href="${PORTAL_URL}" target="_blank">portal.nodeflex.io</a>`,
+			name: 'portalNotice',
+			type: 'notice',
+			default: '',
+		},
 		{
 			displayName: 'API Key',
 			name: 'apiKey',
