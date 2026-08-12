@@ -1,4 +1,5 @@
 import type {
+	IAuthenticateGeneric,
 	ICredentialType,
 	INodeProperties,
 	ICredentialTestRequest,
@@ -32,6 +33,16 @@ export class PrivateWorkflowApi implements ICredentialType {
 			description: 'API key for authenticating with the NodeFlex Private Workflow API',
 		},
 	];
+
+	// Attaches the API key to every request made via httpRequestWithAuthentication
+	authenticate: IAuthenticateGeneric = {
+		type: 'generic',
+		properties: {
+			headers: {
+				'x-api-key': '={{$credentials.apiKey}}',
+			},
+		},
+	};
 
 	// Define the built-in test connection configuration
 	test: ICredentialTestRequest = {

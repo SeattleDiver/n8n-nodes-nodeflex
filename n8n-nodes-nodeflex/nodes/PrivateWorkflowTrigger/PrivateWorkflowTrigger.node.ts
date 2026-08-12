@@ -229,14 +229,15 @@ export class PrivateWorkflowTrigger implements INodeType {
 								throw new NodeOperationError(this.getNode(), 'Reference payload missing value/url');
 							}
 
-							const refResponse = await this.helpers.httpRequest({
-								method: 'GET',
-								url: referenceUrl,
-								headers: {
-									'x-api-key': apiKey,
+							const refResponse = await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								'privateWorkflowApi',
+								{
+									method: 'GET',
+									url: referenceUrl,
+									encoding: 'arraybuffer',
 								},
-								encoding: 'arraybuffer',
-							});
+							);
 
 							const buffer = Buffer.isBuffer(refResponse) ? refResponse : Buffer.from(refResponse);
 							let decodedValue: string;
@@ -339,16 +340,19 @@ export class PrivateWorkflowTrigger implements INodeType {
 								};
 
 								try {
-									await this.helpers.httpRequest({
-										method: 'POST',
-										url: completedUrl,
-										headers: {
-											'x-api-key': apiKey,
-											accept: 'application/json',
+									await this.helpers.httpRequestWithAuthentication.call(
+										this,
+										'privateWorkflowApi',
+										{
+											method: 'POST',
+											url: completedUrl,
+											headers: {
+												accept: 'application/json',
+											},
+											body: completedResponse,
+											json: true,
 										},
-										body: completedResponse,
-										json: true,
-									});
+									);
 									this.logger.info('[PrivateWorkflowTrigger] Immediate response sent via POST');
 								} catch (err) {
 									this.logger.warn(

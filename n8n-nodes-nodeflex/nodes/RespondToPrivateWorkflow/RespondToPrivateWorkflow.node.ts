@@ -481,12 +481,10 @@ export class RespondToPrivateWorkflow implements INodeType {
 				status: 'Completed',
 				payload: hubPayload,
 			};
-			// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
-			await this.helpers.httpRequest({
+			await this.helpers.httpRequestWithAuthentication.call(this, 'privateWorkflowApi', {
 				method: 'POST',
 				url: completedUrl,
 				headers: {
-					'x-api-key': apiKey,
 					accept: 'application/json',
 				},
 				body: completedResponse,

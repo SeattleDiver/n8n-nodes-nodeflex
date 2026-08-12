@@ -124,18 +124,18 @@ export class GetPrivateWorkflowResult implements INodeType {
 		const targetUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/results/${correlationId}`;
 		this.logger.info('[GetPrivateWorkflowResult] Fetching workflow result');
 
-		// Auth uses x-api-key header; httpRequestWithAuthentication not applicable
-		// because the credential doesn't define a generic authenticate property.
-		// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
-		const response = await this.helpers.httpRequest({
-			method: 'GET',
-			url: targetUrl,
-			headers: {
-				'x-api-key': apiKey,
-				accept: 'application/json',
+		const response = await this.helpers.httpRequestWithAuthentication.call(
+			this,
+			'privateWorkflowApi',
+			{
+				method: 'GET',
+				url: targetUrl,
+				headers: {
+					accept: 'application/json',
+				},
+				returnFullResponse: true,
 			},
-			returnFullResponse: true,
-		});
+		);
 
 		const body = response.body as Record<string, unknown>;
 		const status: string | undefined = body?.status as string | undefined;
