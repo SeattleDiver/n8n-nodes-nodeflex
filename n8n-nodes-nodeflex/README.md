@@ -79,7 +79,7 @@ NodeFlex Private Workflows connects workflows on separate n8n instances, separat
 
 ### API Key and message routing
 
-Every NodeFlex account is assigned one or more **API Keys**, which you obtain from [portal.nodeflex.io](https://portal.nodeflex.io). Each API Key identifies your account and scopes all communication — only workflows with matching API Keys can exchange messages with each other through the hub.  Combined with a unique **Workflow Name**, (you can think of this combination as a "channel") you can create unique communication pairs used for workflow routing.
+Every NodeFlex account is assigned one or more **API Keys**, which you obtain from [portal.nodeflex.io](https://portal.nodeflex.io). Each API Key identifies your account and scopes all communication.  Only workflows with matching API Keys can exchange messages with each other through the hub.  Combined with a unique **Workflow Name**, (you can think of this combination as a "channel") you can create unique communication pairs used for workflow routing.
 
 For each API Key, the **Workflow Name** is used to route messages between the calling workflow and the target workflow. The Workflow Name configured on the **Execute Private Workflow** node must exactly match the Workflow Name configured on the **Private Workflow Trigger** node. When the hub receives an execution request, it uses the Workflow Name to find the connected trigger that is listening under that same name and delivers the message to it.
 
@@ -88,13 +88,45 @@ This means you can have multiple independent workflow pairs running under the sa
 ### Sending a request
 
 1. The **Execute Private Workflow** node is used on the calling workflow to send a payload to the NodeFlex hub to start a workflow.  This node is configured with an API Key + Workflow Name.
-2. The hub routes the request to the target instance where the **Private Workflow Trigger** is connected, if connected.
+2. The hub routes the request to the target instance where the **Private Workflow Trigger** is connected.
 3. The **Private Workflow Trigger** receives the request and starts the target workflow.
+
+```mermaid
+flowchart LR
+    subgraph CW[Calling Workflow]
+        direction LR
+        A[Execute Private Workflow]
+    end
+    A -->|HTTP POST| B[NodeFlex Hub]
+    subgraph PW[Private Workflow — remote server]
+        direction LR
+        C[Private Workflow Trigger]
+        D[Target Workflow]
+        C --> D
+    end
+    B -->|SignalR| C
+```
 
 ### Returning a response
 
 1. After the target workflow completes processing, the **Respond to Private Workflow** node sends the response back the calling workflow via the hub.
 2. On the calling side, the **Execute Private Workflow** node (if waiting) or the **Get Private Workflow Result** node (if polling) receives the response and the result payload.
+
+```mermaid
+flowchart LR
+    subgraph PW[Private Workflow — remote server]
+        direction LR
+        D[Target Workflow]
+        C[Respond to Private Workflow]
+        D --> C
+    end
+    C -->|HTTP POST| B[NodeFlex Hub]
+    subgraph CW[Calling Workflow]
+        direction LR
+        A[Get Private Workflow Result]
+    end
+    B -->|"HTTP GET (poll)"| A
+```
 
 ### Summary of payload responsibilities
 
@@ -155,9 +187,9 @@ Polls the NodeFlex hub to retrieve the result of a previously initiated workflow
 
 ## Credentials
 
-This package uses a single credential type:
+This package uses a single credential type.
 
-### Private Workflow API
+### Private Workflow Credentials API
 
 Used by all nodes in this package.
 
