@@ -21,6 +21,9 @@
     "format": "prettier nodes credentials --write",
     "lint": "n8n-node lint",
     "lintfix": "n8n-node lint --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "node scripts/run-integration-tests.mjs",
     "release": "n8n-node release",
     "prepublishOnly": "n8n-node prerelease"
   },
@@ -47,7 +50,8 @@
     "prettier": "^3.5.3",
     "release-it": "^19.2.4",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.10"
   },
   "peerDependencies": { "n8n-workflow": "*" }
 }
