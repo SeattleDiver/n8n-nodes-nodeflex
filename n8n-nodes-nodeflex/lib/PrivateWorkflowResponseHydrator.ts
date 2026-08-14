@@ -7,6 +7,8 @@ export interface HydrationOptions {
 	/** Required only when the hub may return a reference (blob) payload */
 	http?: IN8nHttpHelper;
 	apiKey?: string;
+	/** Input item index to stamp onto returned items' pairedItem, for item-linking in n8n */
+	itemIndex?: number;
 }
 
 export interface HydrationResult {
@@ -23,6 +25,7 @@ export class PrivateWorkflowResponseHydrator {
 
 		const binaryKey = options.binaryPropertyName ?? 'file';
 		const status: string | undefined = body?.status as string | undefined;
+		const pairedItem = options.itemIndex !== undefined ? { item: options.itemIndex } : undefined;
 
 		if (!status) {
 			throw new Error('Response missing status');
@@ -34,7 +37,7 @@ export class PrivateWorkflowResponseHydrator {
 		if (status === 'Queued' || status === 'Running' || status === 'Pending') {
 			return {
 				state: 'pending',
-				items: [{ json: { status } }],
+				items: [{ json: { status }, pairedItem }],
 			};
 		}
 
@@ -53,7 +56,7 @@ export class PrivateWorkflowResponseHydrator {
 		if (!payload || payload.value == null) {
 			return {
 				state: 'completed',
-				items: [{ json: { status } }],
+				items: [{ json: { status }, pairedItem }],
 			};
 		}
 
@@ -106,6 +109,7 @@ export class PrivateWorkflowResponseHydrator {
 			try {
 				parsed = JSON.parse(payload.value);
 			} catch {
+				// eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- protocol-layer utility, no node context available; callers wrap in NodeOperationError
 				throw new Error('Invalid JSON payload');
 			}
 
@@ -114,13 +118,14 @@ export class PrivateWorkflowResponseHydrator {
 					state: 'completed',
 					items: (parsed as Record<string, unknown>[]).map((element) => ({
 						json: { status, ...(element ?? {}) },
+						pairedItem,
 					})),
 				};
 			}
 
 			return {
 				state: 'completed',
-				items: [{ json: { status, ...((parsed as Record<string, unknown>) ?? {}) } }],
+				items: [{ json: { status, ...((parsed as Record<string, unknown>) ?? {}) }, pairedItem }],
 			};
 		}
 
@@ -130,7 +135,7 @@ export class PrivateWorkflowResponseHydrator {
 		if (encoding === 'text') {
 			return {
 				state: 'completed',
-				items: [{ json: { status, text: payload.value } }],
+				items: [{ json: { status, text: payload.value }, pairedItem }],
 			};
 		}
 
@@ -150,6 +155,7 @@ export class PrivateWorkflowResponseHydrator {
 								fileName: 'workflow-response.bin',
 							},
 						},
+						pairedItem,
 					},
 				],
 			};

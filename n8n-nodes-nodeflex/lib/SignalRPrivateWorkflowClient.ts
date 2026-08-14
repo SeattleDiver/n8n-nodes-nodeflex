@@ -131,6 +131,7 @@ export class SignalRPrivateWorkflowClient {
 				phase: 'start',
 				reason: 'Failed to establish SignalR connection'
 			});
+			// eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- protocol-layer utility, no node context available; onConnectionError callback wraps in NodeOperationError
 			throw e;
 		}
 
@@ -237,6 +238,7 @@ export class SignalRPrivateWorkflowClient {
 				registerMessage
 			});
 			this.log('error', 'Registration failed', e?.message || e);
+			// eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- protocol-layer utility, no node context available; onConnectionError callback wraps in NodeOperationError
 			throw e;
 		}
 	}

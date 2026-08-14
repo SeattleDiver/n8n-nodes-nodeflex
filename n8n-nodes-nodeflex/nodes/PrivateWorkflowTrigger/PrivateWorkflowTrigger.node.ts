@@ -5,7 +5,7 @@ import type {
 	ITriggerFunctions,
 	ITriggerResponse,
 } from 'n8n-workflow';
-import { NodeOperationError } from 'n8n-workflow';
+import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
 import { setTimeout as setTimeoutPromise } from 'timers/promises';
 
@@ -20,16 +20,17 @@ export class PrivateWorkflowTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Private Workflow Trigger',
 		name: 'privateWorkflowTrigger',
-		icon: 'file:icon.svg',
+		icon: { light: 'file:icon.svg', dark: 'file:icon.dark.svg' },
 		group: ['trigger'],
 		version: 1,
+		subtitle: '={{$parameter["workflowName"]}}',
 		description: 'When a remote private workflow is executed',
 		defaults: {
 			name: 'Private Workflow Trigger',
 		},
 		usableAsTool: true,
 		inputs: [],
-		outputs: ['main'],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
 				name: 'privateWorkflowApi',

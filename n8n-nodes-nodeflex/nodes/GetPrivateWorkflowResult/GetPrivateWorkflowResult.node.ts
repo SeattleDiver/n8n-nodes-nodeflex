@@ -4,7 +4,7 @@ import type {
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { NodeOperationError } from 'n8n-workflow';
+import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import { HUB_BASE_URL } from '../../lib/HubConfig';
 import { HubProfileService } from '../../lib/HubProfileService';
@@ -16,16 +16,17 @@ export class GetPrivateWorkflowResult implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Get Private Workflow Result',
 		name: 'getPrivateWorkflowResult',
-		icon: 'file:icon.svg',
+		icon: { light: 'file:icon.svg', dark: 'file:icon.dark.svg' },
 		group: ['input'],
 		version: 1,
+		subtitle: '={{$parameter["correlationId"]}}',
 		description: 'Retrieves the current status or result of a Private Workflow execution',
 		defaults: {
 			name: 'Get Private Workflow Result',
 		},
 		usableAsTool: true,
-		inputs: ['main'],
-		outputs: ['main', 'main'],
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main, NodeConnectionTypes.Main],
 		outputNames: ['Completed', 'Pending'],
 		credentials: [
 			{
@@ -157,18 +158,27 @@ export class GetPrivateWorkflowResult implements INodeType {
 
 		if (status !== 'Completed') {
 			if (shouldContinue) {
-				completed.push({ json: { status, correlationId } });
+				completed.push({ json: { status, correlationId }, pairedItem: { item: 0 } });
 			} else {
-				pending.push({ json: { status, correlationId } });
+				pending.push({ json: { status, correlationId }, pairedItem: { item: 0 } });
 			}
 			return [completed, pending];
 		}
 
 		// Completed: decode payload (hydrator handles blob resolution)
-		const result = await PrivateWorkflowResponseHydrator.hydrate(body, {
-			http,
-			apiKey,
-		});
+		let result;
+		try {
+			result = await PrivateWorkflowResponseHydrator.hydrate(body, {
+				http,
+				apiKey,
+				itemIndex: 0,
+			});
+		} catch (error) {
+			throw new NodeOperationError(
+				this.getNode(),
+				error instanceof Error ? error.message : 'Failed to decode workflow response payload',
+			);
+		}
 
 		if (result.state === 'completed') {
 			completed.push(...result.items);

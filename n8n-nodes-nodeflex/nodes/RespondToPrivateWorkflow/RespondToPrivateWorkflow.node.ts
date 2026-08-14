@@ -5,7 +5,7 @@ import type {
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { NodeOperationError } from 'n8n-workflow';
+import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import { HUB_BASE_URL } from '../../lib/HubConfig';
 import { HubProfileService } from '../../lib/HubProfileService';
@@ -21,16 +21,17 @@ export class RespondToPrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Respond to Private Workflow',
 		name: 'respondToPrivateWorkflow',
-		icon: 'file:icon.svg',
+		icon: { light: 'file:icon.svg', dark: 'file:icon.dark.svg' },
 		group: ['output'],
 		version: 1,
+		subtitle: '={{$parameter["respondWith"]}}',
 		description: 'Sends a response back to the Private Workflow Trigger',
 		defaults: {
 			name: 'Respond to Private Workflow',
 		},
 		usableAsTool: true,
-		inputs: ['main'],
-		outputs: ['main'],
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
 				name: 'privateWorkflowApi',
@@ -213,10 +214,11 @@ export class RespondToPrivateWorkflow implements INodeType {
 					// Collect JSON items
 					const jsonItems: IDataObject[] = [];
 
-					for (const item of items) {
+					for (let idx = 0; idx < items.length; idx++) {
+						const item = items[idx];
 						if (item.json && typeof item.json === 'object') {
 							jsonItems.push(item.json as IDataObject);
-							outputItems.push({ json: item.json as IDataObject });
+							outputItems.push({ json: item.json as IDataObject, pairedItem: { item: idx } });
 						}
 					}
 
@@ -228,7 +230,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 				case 'firstItem': {
 					// Reuse allItems logic
 					if (items.length === 0) {
-						outputItems.push({ json: {} });
+						outputItems.push({ json: {}, pairedItem: { item: 0 } });
 						break;
 					}
 
@@ -252,7 +254,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 					delete (clean as Record<string, unknown>).__correlationId;
 
 					payload = clean;
-					outputItems.push({ json: clean });
+					outputItems.push({ json: clean, pairedItem: { item: 0 } });
 					break;
 				}
 
@@ -297,9 +299,11 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 					// Canonical n8n output
 					if (Array.isArray(parsed)) {
-						outputItems.push(...parsed.map((p) => ({ json: p as IDataObject })));
+						outputItems.push(
+							...parsed.map((p) => ({ json: p as IDataObject, pairedItem: { item: 0 } })),
+						);
 					} else {
-						outputItems.push({ json: parsed as IDataObject });
+						outputItems.push({ json: parsed as IDataObject, pairedItem: { item: 0 } });
 					}
 
 					break;
@@ -313,6 +317,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 					// workflow output: keep it JSON-safe
 					outputItems.push({
 						json: { text: text },
+						pairedItem: { item: 0 },
 					});
 
 					break;
@@ -345,6 +350,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 						outputItems.push({
 							json: { correlationId, status: 'Success' },
+							pairedItem: { item: 0 },
 						});
 					} else {
 						// Extract the binary base64 code as n8n expects
@@ -355,6 +361,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 							binary: {
 								[binaryPropertyName]: binaryData,
 							},
+							pairedItem: { item: 0 },
 						});
 					}
 
@@ -367,6 +374,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 					encoding = 'json';
 					outputItems.push({
 						json: { correlationId, status: 'Success' },
+						pairedItem: { item: 0 },
 					});
 					break;
 			}
@@ -529,6 +537,7 @@ export class RespondToPrivateWorkflow implements INodeType {
 
 			// Now fail the node properly
 			if (err instanceof NodeOperationError) {
+				// eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- already a NodeOperationError, guarded above
 				throw err;
 			}
 

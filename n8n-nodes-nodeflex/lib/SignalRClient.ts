@@ -325,8 +325,10 @@ export class HubConnection {
         } catch (err: any) {
             // Normalize AbortError from fetch into a consistent timeout message
             if (err.name === 'AbortError') {
+                // eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- protocol-layer utility, no node context available; callers wrap in NodeOperationError
                 throw new Error(`Connect timed out after ${this.connectTimeoutMs}ms`);
             }
+            // eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- protocol-layer utility, no node context available; callers wrap in NodeOperationError
             throw err;
         }
     }
@@ -430,6 +432,7 @@ export class HubConnection {
                 await setTimeoutPromise(ms, undefined, { signal });
             } catch (e: any) {
                 if (e.name === 'AbortError') break;
+                // eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- protocol-layer utility, no node context available; callers wrap in NodeOperationError
                 throw e;
             }
         }

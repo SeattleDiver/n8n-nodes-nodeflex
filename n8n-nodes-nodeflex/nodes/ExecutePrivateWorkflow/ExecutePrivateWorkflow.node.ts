@@ -7,7 +7,7 @@ import type {
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { NodeOperationError } from 'n8n-workflow';
+import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import { HUB_BASE_URL } from '../../lib/HubConfig';
 import { HubProfileService } from '../../lib/HubProfileService';
@@ -22,16 +22,17 @@ export class ExecutePrivateWorkflow implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Execute Private Workflow',
 		name: 'executePrivateWorkflow',
-		icon: 'file:icon.svg',
+		icon: { light: 'file:icon.svg', dark: 'file:icon.dark.svg' },
 		group: ['transform'],
 		version: 1,
+		subtitle: '={{$parameter["workflowName"]}}',
 		description: 'Run a remote private workflow',
 		defaults: {
 			name: 'Execute Private Workflow',
 		},
 		usableAsTool: true,
-		inputs: ['main'],
-		outputs: ['main', 'main'],
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main, NodeConnectionTypes.Main],
 		outputNames: ['Acknowledged', 'Completed'],
 		credentials: [
 			{
@@ -463,6 +464,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 						status: body.status as string,
 						timeStampUtc: body.timeStampUtc as string,
 					},
+					pairedItem: { item: i },
 				});
 
 				// Completed output when waiting and workflow completed
@@ -472,6 +474,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 							binaryPropertyName: 'file',
 							http,
 							apiKey,
+							itemIndex: i,
 						});
 
 						if (result.state === 'completed') {
@@ -492,11 +495,13 @@ export class ExecutePrivateWorkflow implements INodeType {
 							message,
 							itemIndex: i,
 						},
+						pairedItem: { item: i },
 					});
 					continue;
 				}
 
 				if (error instanceof NodeOperationError) {
+					// eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- already a NodeOperationError, guarded above
 					throw error;
 				}
 
