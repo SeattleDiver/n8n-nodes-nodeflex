@@ -17,11 +17,20 @@ export function createRealHttpClient(): IN8nHttpHelper {
 			}
 
 			const headers: Record<string, string> = { ...(options.headers as Record<string, string> | undefined) };
-			let body: string | undefined;
+			let body: BodyInit | undefined;
 			if (options.body !== undefined) {
-				body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
-				if (options.json !== false && !headers['Content-Type']) {
-					headers['Content-Type'] = 'application/json';
+				if (options.body instanceof FormData || options.body instanceof Blob) {
+					// Pass through as-is — fetch sets the multipart boundary Content-Type
+					// itself for FormData. Stringifying it (the old behavior here) silently
+					// corrupted every blob upload into a literal "{}" body.
+					body = options.body as BodyInit;
+				} else if (typeof options.body === 'string') {
+					body = options.body;
+				} else {
+					body = JSON.stringify(options.body);
+					if (options.json !== false && !headers['Content-Type']) {
+						headers['Content-Type'] = 'application/json';
+					}
 				}
 			}
 
@@ -31,16 +40,24 @@ export function createRealHttpClient(): IN8nHttpHelper {
 				body,
 			});
 
+			if (!response.ok) {
+				throw new Error(`Hub request to ${url.pathname} failed: ${response.status} ${response.statusText}`);
+			}
+
+			// Binary downloads (e.g. blob retrieval) must not be routed through
+			// text()/JSON.parse — that's how PrivateWorkflowTrigger and the
+			// hydrator's reference-payload path fetch raw bytes.
+			if (options.encoding === 'arraybuffer') {
+				const buffer = Buffer.from(await response.arrayBuffer());
+				return options.returnFullResponse ? { statusCode: response.status, body: buffer } : buffer;
+			}
+
 			const text = await response.text();
 			let parsed: unknown = text;
 			try {
 				parsed = text ? JSON.parse(text) : undefined;
 			} catch {
 				// Not JSON — leave as raw text.
-			}
-
-			if (!response.ok) {
-				throw new Error(`Hub request to ${url.pathname} failed: ${response.status} ${response.statusText}`);
 			}
 
 			if (options.returnFullResponse) {

@@ -412,9 +412,18 @@ export class RespondToPrivateWorkflow implements INodeType {
 				payload = clean;
 			}
 
-			// Build serialized payload value
+			// Build serialized payload value.
+			// A null payload with 'json' encoding (the "No Data" mode) must still
+			// serialize to valid JSON — an empty string fails JSON.parse when
+			// GetPrivateWorkflowResult/Execute later reads the response back.
 			const serializedValue =
-				payload == null ? '' : typeof payload === 'string' ? payload : JSON.stringify(payload);
+				payload == null
+					? encoding === 'json'
+						? '{}'
+						: ''
+					: typeof payload === 'string'
+						? payload
+						: JSON.stringify(payload);
 
 			const payloadLength =
 				encoding === 'base64'
