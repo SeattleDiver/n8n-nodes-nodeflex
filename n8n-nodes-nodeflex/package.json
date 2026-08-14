@@ -12,7 +12,6 @@
   },
   "bugs": { "url": "https://github.com/NodeFlexIO/n8n-nodes-nodeflex/issues" },
   "engines": { "node": ">=20.15" },
-  "main": "index.js",
   "scripts": {
     "prebuild": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('tsconfig.tsbuildinfo',{force:true})\"",
     "build": "n8n-node build",

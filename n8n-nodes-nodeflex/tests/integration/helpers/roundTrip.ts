@@ -3,6 +3,7 @@ import { vi } from 'vitest';
 import type { IExecuteFunctions, INodeExecutionData, ITriggerFunctions } from 'n8n-workflow';
 import { createMockContext, type MockContextOptions } from '../../helpers/mockExecuteFunctions';
 import { createRealHttpClient, createRealHttpRequestWithAuthentication } from './realHttpClient';
+import { pollUntil } from './poll';
 import { HubProfileService } from '../../../lib/HubProfileService';
 import { HUB_BASE_URL } from '../../../lib/HubConfig';
 import { PrivateWorkflowTrigger } from '../../../nodes/PrivateWorkflowTrigger/PrivateWorkflowTrigger.node';
@@ -61,7 +62,15 @@ export async function waitForTriggerMessage(
 		if (!triggerCtx.emit.mock.calls.length) throw new Error('not emitted yet');
 	}, { timeout });
 
-	const item = triggerCtx.emit.mock.calls[0][0][0][0];
+	const calls = triggerCtx.emit.mock.calls;
+	if (calls.length !== 1) {
+		throw new Error(
+			`waitForTriggerMessage expected exactly 1 emit call, got ${calls.length}. ` +
+				'This helper assumes single-shot usage against a fresh trigger context.',
+		);
+	}
+
+	const item = calls[0][0][0][0];
 	const correlationId = item.json.__correlationId as string;
 	return { item, correlationId };
 }
@@ -84,6 +93,27 @@ export async function getWorkflowResult(
 	const ctx = createMockContext(baseOptions(apiKey, { params: { correlationId, continueOn } }));
 	const node = new GetPrivateWorkflowResult();
 	return node.execute.call(ctx as unknown as IExecuteFunctions);
+}
+
+/**
+ * Polls `getWorkflowResult` with backoff until `predicate` is satisfied,
+ * instead of a fixed delay — spaces successive hub calls out enough to avoid
+ * its rate limit on repeated polling of the same correlationId, while
+ * resolving as soon as the expected state is reached rather than always
+ * waiting the full fixed delay.
+ */
+export async function pollWorkflowResult(
+	apiKey: string,
+	correlationId: string,
+	continueOn: string[],
+	predicate: (result: INodeExecutionData[][]) => boolean,
+	options?: { timeoutMs?: number },
+): Promise<INodeExecutionData[][]> {
+	return pollUntil(() => getWorkflowResult(apiKey, correlationId, continueOn), predicate, {
+		initialDelayMs: 500,
+		maxDelayMs: 3000,
+		...options,
+	});
 }
 
 /**

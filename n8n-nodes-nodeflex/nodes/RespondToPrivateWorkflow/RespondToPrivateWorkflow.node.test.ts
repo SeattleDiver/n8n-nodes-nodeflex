@@ -73,8 +73,9 @@ describe('RespondToPrivateWorkflow', () => {
 		).rejects.toThrow('Response Body resolved to unsupported type (number)');
 	});
 
-	it('RW-16: binary mode with no binary data found is graceful, not a throw', async () => {
-		const [outputItems] = await run({ params: { respondWith: 'binary', binaryMode: 'auto' }, inputItems: [{ json: {} }] });
-		expect(outputItems).toEqual([{ json: { correlationId: 'corr-1', status: 'Success' }, pairedItem: { item: 0 } }]);
+	it('RW-16: binary mode with no binary data found throws', async () => {
+		await expect(
+			run({ params: { respondWith: 'binary', binaryMode: 'auto' }, inputItems: [{ json: {} }] }),
+		).rejects.toThrow('"Binary File" response requires a binary property on the input item, but none was found.');
 	});
 });

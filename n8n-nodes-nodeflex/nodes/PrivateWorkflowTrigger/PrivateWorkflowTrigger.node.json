@@ -2,7 +2,7 @@
 	"node": "@nodeflex/n8n-nodes-nodeflex.privateWorkflowTrigger",
 	"nodeVersion": "1",
 	"codexVersion": "1.0",
-	"categories": ["Trigger"],
+	"categories": ["Development", "Communication"],
 	"resources": {
 		"credentialDocumentation": [
 			{

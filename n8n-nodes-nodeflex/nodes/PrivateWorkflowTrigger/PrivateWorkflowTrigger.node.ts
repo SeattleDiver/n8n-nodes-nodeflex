@@ -16,6 +16,10 @@ import { PrivateWorkflowPayload } from '../../lib/PrivateWorkflowPayload';
 import { SignalRPrivateWorkflowClient } from '../../lib/SignalRPrivateWorkflowClient';
 import { WorkflowHubService } from '../../lib/WorkflowHubService';
 
+// This node only implements trigger(), not execute(), so it can never be a valid
+// AI Agent tool; the rule's type only allows `true | UsableAsToolDescription`, so
+// there's no way to declare "not usable" other than omitting the property.
+// eslint-disable-next-line @n8n/community-nodes/node-usable-as-tool
 export class PrivateWorkflowTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Private Workflow Trigger',
@@ -28,7 +32,6 @@ export class PrivateWorkflowTrigger implements INodeType {
 		defaults: {
 			name: 'Private Workflow Trigger',
 		},
-		usableAsTool: true,
 		inputs: [],
 		outputs: [NodeConnectionTypes.Main],
 		credentials: [

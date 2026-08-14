@@ -342,28 +342,22 @@ export class RespondToPrivateWorkflow implements INodeType {
 					}
 
 					if (!binaryData || !binaryPropertyName) {
-						this.logger?.warn?.(
-							`[RespondToPrivateWorkflow] No binary data for correlation=${correlationId}`,
+						throw new NodeOperationError(
+							this.getNode(),
+							'"Binary File" response requires a binary property on the input item, but none was found.',
 						);
-
-						payload = null;
-
-						outputItems.push({
-							json: { correlationId, status: 'Success' },
-							pairedItem: { item: 0 },
-						});
-					} else {
-						// Extract the binary base64 code as n8n expects
-						payload = binaryData.data;
-
-						outputItems.push({
-							json: { correlationId, status: 'Success' },
-							binary: {
-								[binaryPropertyName]: binaryData,
-							},
-							pairedItem: { item: 0 },
-						});
 					}
+
+					// Extract the binary base64 code as n8n expects
+					payload = binaryData.data;
+
+					outputItems.push({
+						json: { correlationId, status: 'Success' },
+						binary: {
+							[binaryPropertyName]: binaryData,
+						},
+						pairedItem: { item: 0 },
+					});
 
 					break;
 				}

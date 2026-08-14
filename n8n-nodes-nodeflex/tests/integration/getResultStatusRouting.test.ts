@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { sleep } from 'n8n-workflow';
-import { withCorrelationId, respondToWorkflow, getWorkflowResult } from './helpers/roundTrip';
+import { withCorrelationId, respondToWorkflow, getWorkflowResult, pollWorkflowResult } from './helpers/roundTrip';
 
 // The hub throttles rapid repeated polling of the same correlationId (a
-// reasonable anti-abuse limit) — space out successive GetPrivateWorkflowResult
-// calls against the same correlationId the way a real polling workflow would.
-const pause = sleep;
+// reasonable anti-abuse limit) — pollWorkflowResult backs off between
+// successive GetPrivateWorkflowResult calls against the same correlationId
+// the way a real polling workflow would, resolving as soon as the expected
+// state is reached instead of always waiting a fixed delay.
 
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-globals -- test-only file, not part of the published package
 const apiKey = process.env.NODEFLEX_TEST_API_KEY;
@@ -33,11 +33,12 @@ describe.skipIf(!apiKey)('Live status routing: GetPrivateWorkflowResult', () => 
 			// the "Completed" output — but it must NOT get the hydrated payload,
 			// only the bare status/correlationId (GR-03).
 			const preStatus = pendingBefore[0].json.status as string;
-			await pause(3000);
-			const [completedViaContinueOn] = await getWorkflowResult(apiKey as string, correlationId, [
-				'Completed',
-				preStatus,
-			]);
+			const [completedViaContinueOn] = await pollWorkflowResult(
+				apiKey as string,
+				correlationId,
+				['Completed', preStatus],
+				([completed]) => completed.length === 1,
+			);
 			expect(completedViaContinueOn).toHaveLength(1);
 			expect(Object.keys(completedViaContinueOn[0].json).sort()).toEqual(['correlationId', 'status']);
 
@@ -48,10 +49,12 @@ describe.skipIf(!apiKey)('Live status routing: GetPrivateWorkflowResult', () => 
 				responseData: { done: true },
 			});
 
-			await pause(3000);
-			const [completedAfter, pendingAfter] = await getWorkflowResult(apiKey as string, correlationId, [
-				'Completed',
-			]);
+			const [completedAfter, pendingAfter] = await pollWorkflowResult(
+				apiKey as string,
+				correlationId,
+				['Completed'],
+				([completed]) => completed.length === 1,
+			);
 			expect(pendingAfter).toHaveLength(0);
 			expect(completedAfter).toHaveLength(1);
 			expect(completedAfter[0].json.done).toBe(true);
