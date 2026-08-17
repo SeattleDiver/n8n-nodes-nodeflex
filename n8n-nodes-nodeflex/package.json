@@ -2,16 +2,31 @@
   "name": "@nodeflex/n8n-nodes-nodeflex",
   "version": "0.1.1",
   "description": "n8n community node package for executing private workflows via the NodeFlex SignalR hub",
-  "keywords": ["n8n-community-node-package", "nodeflex", "private workflow", "signalr"],
+  "keywords": [
+    "n8n-community-node-package",
+    "nodeflex",
+    "private workflow",
+    "signalr"
+  ],
   "license": "MIT",
   "homepage": "https://github.com/NodeFlexIO/n8n-nodes-nodeflex#readme",
-  "author": { "name": "J. Robert Tryon, Jr.", "email": "bobtryon@nodeflex.io" },
+  "author": {
+    "name": "J. Robert Tryon, Jr.",
+    "email": "bobtryon@nodeflex.io"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/NodeFlexIO/n8n-nodes-nodeflex.git"
   },
-  "bugs": { "url": "https://github.com/NodeFlexIO/n8n-nodes-nodeflex/issues" },
-  "engines": { "node": ">=20.15" },
+  "bugs": {
+    "url": "https://github.com/NodeFlexIO/n8n-nodes-nodeflex/issues"
+  },
+  "engines": {
+    "node": ">=20.15"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "prebuild": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('tsconfig.tsbuildinfo',{force:true})\"",
     "build": "n8n-node build",
@@ -26,7 +41,9 @@
     "release": "n8n-node release",
     "prepublishOnly": "n8n-node prerelease"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "n8n": {
     "n8nNodesApiVersion": 1,
     "strict": true,
@@ -52,5 +69,7 @@
     "typescript": "^5.8.3",
     "vitest": "^4.1.10"
   },
-  "peerDependencies": { "n8n-workflow": "*" }
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
 }

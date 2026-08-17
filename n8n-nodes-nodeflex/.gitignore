@@ -21,5 +21,6 @@ tsconfig.tsbuildinfo
 # Copilot / editor instructions (internal tooling, not for public consumers)
 .github/copilot-instructions.md
 .github/*
+!.github/workflows/
 .vscode/*
 node_modules/*
