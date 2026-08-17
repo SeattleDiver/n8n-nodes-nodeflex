@@ -1,5 +1,5 @@
 {
-	"node": "n8n-nodes-nodeflex.getPrivateWorkflowResult",
+	"node": "@nodeflex/n8n-nodes-nodeflex.getPrivateWorkflowResult",
 	"nodeVersion": "1",
 	"codexVersion": "1.0",
 	"categories": ["Development", "Communication"],

@@ -1,5 +1,5 @@
 {
-  "name": "n8n-nodes-nodeflex",
+  "name": "@nodeflex/n8n-nodes-nodeflex",
   "version": "0.0.1",
   "description": "n8n community node package for executing private workflows via the NodeFlex SignalR hub",
   "keywords": [
