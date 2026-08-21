@@ -1,6 +1,5 @@
-# PENDING APPROVAL by n8n
-## NodeFlex
-### n8n-nodes-nodeflex
+# NodeFlex
+## n8n-nodes-nodeflex
 
 This is an n8n community node package. It lets you execute remote private workflows securely in your n8n workflows using [NodeFlex](https://nodeflex.io).
 
