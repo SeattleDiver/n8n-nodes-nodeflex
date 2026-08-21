@@ -4,8 +4,9 @@ import type {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	JsonObject,
 } from 'n8n-workflow';
-import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import { HUB_BASE_URL } from '../../lib/HubConfig';
 import { HubProfileService } from '../../lib/HubProfileService';
@@ -15,6 +16,7 @@ import {
 	PrivateWorkflowPayloadEncoding,
 } from '../../lib/PrivateWorkflowPayload';
 import { PrivateWorkflowResponse } from '../../lib/PrivateWorkflowResponse';
+import { WorkflowHubService } from '../../lib/WorkflowHubService';
 import { WorkflowPayloadBlobTransport } from '../../lib/WorkflowPayloadBlobTransport';
 
 export class RespondToPrivateWorkflow implements INodeType {
@@ -182,9 +184,18 @@ export class RespondToPrivateWorkflow implements INodeType {
 		}
 		const http: IN8nHttpHelper = { httpRequest: this.helpers.httpRequest.bind(this.helpers) };
 		const hubService = new HubProfileService(HUB_BASE_URL, http);
-		const hubInfo = await hubService.getHubInfo(apiKey);
+		let hubInfo: WorkflowHubService;
+		try {
+			hubInfo = await hubService.getHubInfo(apiKey);
+		} catch (err) {
+			throw new NodeApiError(this.getNode(), err as JsonObject, {
+				message: 'Hub service is unavailable.',
+			});
+		}
 		if (!hubInfo.apiUrl) {
-			throw new NodeOperationError(this.getNode(), 'API URL is unavailable. Hub service is down.');
+			throw new NodeApiError(this.getNode(), hubInfo as unknown as JsonObject, {
+				message: 'API URL is unavailable. Hub service is down.',
+			});
 		}
 
 		let correlationId = this.getNodeParameter('correlationId', 0) as string;
@@ -522,12 +533,10 @@ export class RespondToPrivateWorkflow implements INodeType {
 					status: 'Failed',
 					payload: failurePayload,
 				};
-				// eslint-disable-next-line @n8n/community-nodes/no-http-request-with-manual-auth
-				await this.helpers.httpRequest({
+				await this.helpers.httpRequestWithAuthentication.call(this, 'privateWorkflowApi', {
 					method: 'POST',
 					url: completedUrl,
 					headers: {
-						'x-api-key': apiKey,
 						accept: 'application/json',
 					},
 					body: failedResponse,
@@ -539,8 +548,8 @@ export class RespondToPrivateWorkflow implements INodeType {
 			}
 
 			// Now fail the node properly
-			if (err instanceof NodeOperationError) {
-				// eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- already a NodeOperationError, guarded above
+			if (err instanceof NodeOperationError || err instanceof NodeApiError) {
+				// eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- already correctly typed, guarded above
 				throw err;
 			}
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { IExecuteFunctions } from 'n8n-workflow';
+import { NodeApiError } from 'n8n-workflow';
 import { createMockContext, mockHttpRequestRouter } from '../../tests/helpers/mockExecuteFunctions';
 import { ExecutePrivateWorkflow } from './ExecutePrivateWorkflow.node';
 
@@ -61,10 +62,9 @@ describe('ExecutePrivateWorkflow', () => {
 			continueOnFail: true,
 			inputItems: [{ json: { a: 1 } }, { json: { a: 2 } }],
 			paramsByItem: [{ workflowName: '' }, { workflowName: 'test-workflow' }],
-			httpRequest: mockHttpRequestRouter({
-				onOtherCall: () => ({
-					body: JSON.stringify({ correlationId: 'corr-1', path: 'p', status: 'Running', timeStampUtc: '2026-01-01T00:00:00Z' }),
-				}),
+			httpRequest: mockHttpRequestRouter(),
+			httpRequestWithAuthentication: () => ({
+				body: JSON.stringify({ correlationId: 'corr-1', path: 'p', status: 'Running', timeStampUtc: '2026-01-01T00:00:00Z' }),
 			}),
 		});
 
@@ -79,5 +79,48 @@ describe('ExecutePrivateWorkflow', () => {
 		// Item 1 succeeded normally.
 		expect(ackData[1].json.error).toBeUndefined();
 		expect(ackData[1].pairedItem).toEqual({ item: 1 });
+	});
+
+	it('EW-24: sends the main hub request via credential-based auth, not a manual header', async () => {
+		let sawCredentialType: string | undefined;
+		const result = await run({
+			httpRequestWithAuthentication: (credentialType) => {
+				sawCredentialType = credentialType;
+				return {
+					body: JSON.stringify({ correlationId: 'corr-1', path: 'p', status: 'Running', timeStampUtc: '2026-01-01T00:00:00Z' }),
+				};
+			},
+		});
+
+		expect(sawCredentialType).toBe('privateWorkflowApi');
+		const [ackData] = result;
+		expect(ackData[0].json.correlationId).toBe('corr-1');
+	});
+
+	it('EW-25: text payload type sends the configured text value', async () => {
+		let capturedBody: string | undefined;
+		await run({
+			params: { payloadType: 'text', textValue: 'hello world' },
+			httpRequestWithAuthentication: (_credentialType, options) => {
+				capturedBody = options.body as string;
+				return {
+					body: JSON.stringify({ correlationId: 'corr-1', path: 'p', status: 'Running', timeStampUtc: '2026-01-01T00:00:00Z' }),
+				};
+			},
+		});
+
+		const sentPayload = JSON.parse(capturedBody ?? '{}').payload;
+		expect(sentPayload.encoding).toBe('text');
+		expect(sentPayload.value).toBe('hello world');
+	});
+
+	it('EW-26: hub connectivity failure (EW-17) is thrown as NodeApiError', async () => {
+		await expect(
+			run({
+				httpRequest: () => {
+					throw new Error('network unreachable');
+				},
+			}),
+		).rejects.toBeInstanceOf(NodeApiError);
 	});
 });
