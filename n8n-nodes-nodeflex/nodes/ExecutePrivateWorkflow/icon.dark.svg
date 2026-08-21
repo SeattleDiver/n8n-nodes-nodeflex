@@ -5,38 +5,38 @@
            A52 52 0 0 1 184 76
            a28 28 0 0 1-16 52Z"
         fill="none"
-        stroke="#00C896"
+        stroke="#5EEAC0"
         stroke-width="19"
         stroke-linecap="butt"
         stroke-linejoin="miter"/>
 
   <!-- Vertical line from cloud center (Stroke reduced to 15) -->
   <line x1="128" y1="128" x2="128" y2="160"
-        stroke="#00C896"
+        stroke="#5EEAC0"
         stroke-width="15"
         stroke-linecap="butt"/>
 
   <!-- Local horizontal network bar (Stroke reduced to 15) -->
   <!-- Length adjusted to 48.5 and 207.5 to align with the 15px stroke stems -->
   <line x1="48.5" y1="160" x2="207.5" y2="160"
-        stroke="#00C896"
+        stroke="#5EEAC0"
         stroke-width="15"
         stroke-linecap="butt"/>
 
   <!-- Three symmetrical vertical stems (Stroke reduced to 15) -->
   <line x1="56" y1="160" x2="56" y2="194"
-        stroke="#00C896" stroke-width="15" stroke-linecap="butt"/>
+        stroke="#5EEAC0" stroke-width="15" stroke-linecap="butt"/>
   <line x1="128" y1="160" x2="128" y2="194"
-        stroke="#00C896" stroke-width="15" stroke-linecap="butt"/>
+        stroke="#5EEAC0" stroke-width="15" stroke-linecap="butt"/>
   <line x1="200" y1="160" x2="200" y2="194"
-        stroke="#00C896" stroke-width="15" stroke-linecap="butt"/>
+        stroke="#5EEAC0" stroke-width="15" stroke-linecap="butt"/>
 
   <!-- Three squared hollow nodes (Stroke reduced to 11) -->
   <!-- Placed at y=194 to sit flush with the 15px stems -->
   <rect x="36" y="194" width="40" height="40"
-        fill="none" stroke="#00C896" stroke-width="11" stroke-linejoin="miter"/>
+        fill="none" stroke="#5EEAC0" stroke-width="11" stroke-linejoin="miter"/>
   <rect x="108" y="194" width="40" height="40"
-        fill="none" stroke="#00C896" stroke-width="11" stroke-linejoin="miter"/>
+        fill="none" stroke="#5EEAC0" stroke-width="11" stroke-linejoin="miter"/>
   <rect x="180" y="194" width="40" height="40"
-        fill="none" stroke="#00C896" stroke-width="11" stroke-linejoin="miter"/>
+        fill="none" stroke="#5EEAC0" stroke-width="11" stroke-linejoin="miter"/>
 </svg>

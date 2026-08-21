@@ -6,8 +6,9 @@ import type {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	JsonObject,
 } from 'n8n-workflow';
-import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import { HUB_BASE_URL } from '../../lib/HubConfig';
 import { HubProfileService } from '../../lib/HubProfileService';
@@ -65,6 +66,11 @@ export class ExecutePrivateWorkflow implements INodeType {
 						name: 'Binary File',
 						value: 'binary',
 						description: 'Use a binary file from the input as the workflow payload',
+					},
+					{
+						name: 'Text',
+						value: 'text',
+						description: 'Send plain text as the workflow payload',
 					},
 				],
 			},
@@ -190,21 +196,19 @@ export class ExecutePrivateWorkflow implements INodeType {
 				let hubInfo: WorkflowHubService;
 				try {
 					hubInfo = await hubService.getHubInfo(apiKey);
-				} catch {
-					throw new NodeOperationError(this.getNode(), 'Hub service is unavailable.', {
+				} catch (err) {
+					throw new NodeApiError(this.getNode(), err as JsonObject, {
+						message: 'Hub service is unavailable.',
 						itemIndex: i,
 					});
 				}
 
 				const hubUrl = hubInfo.hubUrl;
 				if (!hubUrl) {
-					throw new NodeOperationError(
-						this.getNode(),
-						'Hub URL is unavailable.  Hub service is down.',
-						{
-							itemIndex: i,
-						},
-					);
+					throw new NodeApiError(this.getNode(), hubInfo as unknown as JsonObject, {
+						message: 'Hub URL is unavailable.  Hub service is down.',
+						itemIndex: i,
+					});
 				}
 
 				const workflowName = this.getNodeParameter('workflowName', i) as string;
@@ -217,25 +221,19 @@ export class ExecutePrivateWorkflow implements INodeType {
 				const hubPath = hubInfo.accountPath + '/' + workflowName;
 				const blobUrl = hubInfo.blobStorageUrl;
 				if (!blobUrl) {
-					throw new NodeOperationError(
-						this.getNode(),
-						'Blob URL is unavailable.  Hub service is down.',
-						{
-							itemIndex: i,
-						},
-					);
+					throw new NodeApiError(this.getNode(), hubInfo as unknown as JsonObject, {
+						message: 'Blob URL is unavailable.  Hub service is down.',
+						itemIndex: i,
+					});
 				}
 				this.logger.info('Blob storage endpoint resolved');
 
 				const apiUrl = hubInfo.apiUrl;
 				if (!apiUrl) {
-					throw new NodeOperationError(
-						this.getNode(),
-						'Endpoint URL is unavailable.  Hub service is down.',
-						{
-							itemIndex: i,
-						},
-					);
+					throw new NodeApiError(this.getNode(), hubInfo as unknown as JsonObject, {
+						message: 'Endpoint URL is unavailable.  Hub service is down.',
+						itemIndex: i,
+					});
 				}
 
 				this.logger.info('Hub endpoints resolved');
@@ -248,7 +246,7 @@ export class ExecutePrivateWorkflow implements INodeType {
 				const item = items[i];
 
 				// Extract node parameters
-				const payloadType = this.getNodeParameter('payloadType', i) as 'json' | 'binary';
+				const payloadType = this.getNodeParameter('payloadType', i) as 'json' | 'binary' | 'text';
 
 				const waitForResponse = this.getNodeParameter('waitForResponse', i) as boolean;
 				let waitTimeout = 0;
@@ -310,6 +308,14 @@ export class ExecutePrivateWorkflow implements INodeType {
 					this.logger.info(
 						`Encoded binary payload "${binaryPropertyNameToUse}" as base64 (${payloadLength} bytes, ${binary.mimeType ?? 'unknown mime'})`,
 					);
+				} else if (payloadType === 'text') {
+					const textValue = this.getNodeParameter('textValue', i) as string;
+
+					encodedPayload = textValue ?? '';
+					payloadLength = Buffer.byteLength(encodedPayload, 'utf8');
+					payloadEncoding = 'text';
+
+					this.logger.info(`Encoded text payload (${payloadLength} bytes)`);
 				} else {
 					// payloadType === 'json'
 					const jsonSource = this.getNodeParameter('jsonSource', i) as 'input' | 'custom';
@@ -412,20 +418,19 @@ export class ExecutePrivateWorkflow implements INodeType {
 
 				this.logger.info('Calling private workflow');
 
-				const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-				if (apiKey) {
-					requestHeaders['x-api-key'] = apiKey;
-				}
-
-				const httpResponse = await http.httpRequest({
-					method: 'POST',
-					url: targetUrl,
-					headers: requestHeaders,
-					body: JSON.stringify(request),
-					timeout: 15000,
-					returnFullResponse: true,
-					json: false,
-				} as IHttpRequestOptions);
+				const httpResponse = await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'privateWorkflowApi',
+					{
+						method: 'POST',
+						url: targetUrl,
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(request),
+						timeout: 15000,
+						returnFullResponse: true,
+						json: false,
+					} as IHttpRequestOptions,
+				);
 
 				const rawBody = httpResponse.body;
 				const response =
@@ -442,7 +447,9 @@ export class ExecutePrivateWorkflow implements INodeType {
 				// Handle the response
 				const statusCode = (response as Record<string, unknown>)?.statusCode;
 				if (typeof statusCode === 'number' && statusCode >= 500) {
-					throw new NodeOperationError(this.getNode(), `Hub error (${statusCode})`, {
+					throw new NodeApiError(this.getNode(), response as JsonObject, {
+						message: `Hub error (${statusCode})`,
+						httpCode: String(statusCode),
 						itemIndex: i,
 					});
 				}
@@ -452,7 +459,8 @@ export class ExecutePrivateWorkflow implements INodeType {
 					unknown
 				>;
 				if (!body || typeof body !== 'object') {
-					throw new NodeOperationError(this.getNode(), 'Invalid response body from hub', {
+					throw new NodeApiError(this.getNode(), response as JsonObject, {
+						message: 'Invalid response body from hub',
 						itemIndex: i,
 					});
 				}
@@ -482,7 +490,8 @@ export class ExecutePrivateWorkflow implements INodeType {
 						}
 					}
 				} else {
-					throw new NodeOperationError(this.getNode(), 'Missing body in response', {
+					throw new NodeApiError(this.getNode(), response as JsonObject, {
+						message: 'Missing body in response',
 						itemIndex: i,
 					});
 				}
@@ -500,8 +509,8 @@ export class ExecutePrivateWorkflow implements INodeType {
 					continue;
 				}
 
-				if (error instanceof NodeOperationError) {
-					// eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- already a NodeOperationError, guarded above
+				if (error instanceof NodeOperationError || error instanceof NodeApiError) {
+					// eslint-disable-next-line @n8n/community-nodes/require-node-api-error -- already correctly typed, guarded above
 					throw error;
 				}
 

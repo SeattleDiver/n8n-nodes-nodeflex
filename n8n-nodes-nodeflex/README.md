@@ -235,6 +235,20 @@ If the wait times out or you prefer asynchronous checking:
 
 ## Version history
 
+### 0.1.4
+
+- Removed dev-only tooling not needed to build, test, or publish this package
+- Removed pending-approval banner from README title
+
+### 0.1.3
+
+- Release housekeeping and changelog generation
+
+### 0.1.2
+
+- Renamed package to `@nodeflex/n8n-nodes-nodeflex`
+- Updated n8n SDK to current major version and fixed resulting lint gaps
+
 ### 0.1.1
 
 - Code quality improvements: removed unused code, tightened TypeScript types, extracted named constants

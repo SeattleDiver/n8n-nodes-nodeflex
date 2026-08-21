@@ -4,8 +4,9 @@ import type {
 	INodeTypeDescription,
 	ITriggerFunctions,
 	ITriggerResponse,
+	JsonObject,
 } from 'n8n-workflow';
-import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 // eslint-disable-next-line @n8n/community-nodes/no-restricted-imports
 import { setTimeout as setTimeoutPromise } from 'timers/promises';
 
@@ -142,22 +143,26 @@ export class PrivateWorkflowTrigger implements INodeType {
 		// Throws on any failure so the retry loop can catch and retry.
 		const connectToHub = async () => {
 			const hubService = new HubProfileService(hubBase, http);
-			hubInfo = await hubService.getHubInfo(apiKey);
+			try {
+				hubInfo = await hubService.getHubInfo(apiKey);
+			} catch (err) {
+				throw new NodeApiError(this.getNode(), err as JsonObject, {
+					message: 'Hub service is unavailable.',
+				});
+			}
 
 			const hubUrl = hubInfo?.hubUrl;
 			if (!hubUrl) {
-				throw new NodeOperationError(
-					this.getNode(),
-					'Hub URL is unavailable.  Hub service is down.',
-				);
+				throw new NodeApiError(this.getNode(), hubInfo as unknown as JsonObject, {
+					message: 'Hub URL is unavailable.  Hub service is down.',
+				});
 			}
 			hubPath = hubInfo.accountPath + '/' + workflowName;
 			const blobUrl = hubInfo?.blobStorageUrl;
 			if (!blobUrl) {
-				throw new NodeOperationError(
-					this.getNode(),
-					'Blob URL is unavailable.  Hub service is down.',
-				);
+				throw new NodeApiError(this.getNode(), hubInfo as unknown as JsonObject, {
+					message: 'Blob URL is unavailable.  Hub service is down.',
+				});
 			}
 			this.logger.info('Hub endpoints resolved');
 
@@ -399,8 +404,9 @@ export class PrivateWorkflowTrigger implements INodeType {
 					}
 
 					// Properly propagate the error to n8n so the trigger terminates
-					const message = err instanceof Error ? err.message : String(err);
-					throw new NodeOperationError(this.getNode(), message);
+					throw new NodeApiError(this.getNode(), err as JsonObject, {
+						message: err instanceof Error ? err.message : String(err),
+					});
 				},
 
 				onConnectionLost: async (err: unknown) => {

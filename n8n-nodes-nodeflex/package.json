@@ -22,7 +22,7 @@
     "url": "https://github.com/NodeFlexIO/n8n-nodes-nodeflex/issues"
   },
   "engines": {
-    "node": ">=20.15"
+    "node": ">=22.22.0"
   },
   "publishConfig": {
     "access": "public"

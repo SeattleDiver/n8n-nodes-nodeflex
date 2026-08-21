@@ -6,12 +6,12 @@
 	"resources": {
 		"credentialDocumentation": [
 			{
-				"url": "https://www.nodeflex.io/docs/credentials"
+				"url": "https://github.com/NodeFlexIO/n8n-nodes-nodeflex#credentials"
 			}
 		],
 		"primaryDocumentation": [
 			{
-				"url": "https://www.nodeflex.io/docs"
+				"url": "https://github.com/NodeFlexIO/n8n-nodes-nodeflex#readme"
 			}
 		]
 	}

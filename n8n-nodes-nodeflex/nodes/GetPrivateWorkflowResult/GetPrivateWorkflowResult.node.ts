@@ -3,8 +3,9 @@ import type {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	JsonObject,
 } from 'n8n-workflow';
-import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 import { HUB_BASE_URL } from '../../lib/HubConfig';
 import { HubProfileService } from '../../lib/HubProfileService';
@@ -112,37 +113,47 @@ export class GetPrivateWorkflowResult implements INodeType {
 		let hubInfo: WorkflowHubService;
 		try {
 			hubInfo = await hubService.getHubInfo(apiKey);
-		} catch {
-			throw new NodeOperationError(this.getNode(), 'Hub service is unavailable.');
+		} catch (err) {
+			throw new NodeApiError(this.getNode(), err as JsonObject, {
+				message: 'Hub service is unavailable.',
+			});
 		}
 
 		if (!hubInfo.hubUrl || !hubInfo.apiUrl || !hubInfo.blobStorageUrl) {
-			throw new NodeOperationError(
-				this.getNode(),
-				'Hub service information is incomplete or unavailable.',
-			);
+			throw new NodeApiError(this.getNode(), hubInfo as unknown as JsonObject, {
+				message: 'Hub service information is incomplete or unavailable.',
+			});
 		}
 		const targetUrl = `${hubInfo.apiUrl.replace(/\/+$/, '')}/results/${correlationId}`;
 		this.logger.info('[GetPrivateWorkflowResult] Fetching workflow result');
 
-		const response = await this.helpers.httpRequestWithAuthentication.call(
-			this,
-			'privateWorkflowApi',
-			{
-				method: 'GET',
-				url: targetUrl,
-				headers: {
-					accept: 'application/json',
+		let response;
+		try {
+			response = await this.helpers.httpRequestWithAuthentication.call(
+				this,
+				'privateWorkflowApi',
+				{
+					method: 'GET',
+					url: targetUrl,
+					headers: {
+						accept: 'application/json',
+					},
+					returnFullResponse: true,
 				},
-				returnFullResponse: true,
-			},
-		);
+			);
+		} catch (err) {
+			throw new NodeApiError(this.getNode(), err as JsonObject, {
+				message: 'Failed to fetch workflow result from hub.',
+			});
+		}
 
 		const body = response.body as Record<string, unknown>;
 		const status: string | undefined = body?.status as string | undefined;
 
 		if (!status) {
-			throw new NodeOperationError(this.getNode(), 'Hub response missing status field');
+			throw new NodeApiError(this.getNode(), response as JsonObject, {
+				message: 'Hub response missing status field',
+			});
 		}
 
 		// Routing: non-Completed statuses

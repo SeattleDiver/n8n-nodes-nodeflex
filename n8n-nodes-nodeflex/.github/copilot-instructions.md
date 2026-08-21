@@ -12,7 +12,7 @@ npm run lintfix      # lint --fix (auto-corrects fixable issues)
 npm run format       # prettier on nodes/ and credentials/
 ```
 
-There is no test suite. The build output goes to `dist/` (listed in `package.json` `"files"`). Only `dist/` is published to npm.
+Tests run via Vitest: `npm test` runs the unit suite (`nodes/**/*.node.test.ts`, `lib/**/*.test.ts`, no network); `npm run test:integration` runs the live-hub integration suite (`tests/integration/`, requires a gitignored `.env.test.local` with a real API key). The build output goes to `dist/` (listed in `package.json` `"files"`). Only `dist/` is published to npm.
 
 Publishing is done via GitHub Actions (`publish.yml`) triggered by a version tag (e.g., `0.2.0`). The workflow runs `npm run build`, `npm run lint`, then `npm publish --provenance --access public`.
 
@@ -47,10 +47,9 @@ All business logic lives in `lib/`. These classes are **not** listed in `tsconfi
 | `WorkflowHubService.ts` | Typed shape returned by `HubProfileService.getHubInfo()` |
 | `SignalRClient.ts` | Zero-dependency custom SignalR WebSocket client |
 | `SignalRPrivateWorkflowClient.ts` | Wraps `SignalRClient`; handles register/ACK/execute/respond hub messages |
-| `PrivateWorkflowHttpClient.ts` | Thin HTTP POST wrapper (used by `ExecutePrivateWorkflow`) |
 | `WorkflowPayloadBlobTransport.ts` | Upload/download payloads to blob storage (payloads 64 KB – 10 MB) |
 | `PrivateWorkflowResponseHydrator.ts` | Decodes hub responses into `INodeExecutionData[]` |
-| `PrivateWorkflowPayload.ts` | Discriminated union type for all payload transport |
+| `PrivateWorkflowPayload.ts` / `PrivateWorkflowRequest.ts` / `PrivateWorkflowResponse.ts` / `PrivateWorkflowAck.ts` | Wire-format interfaces/type unions for payload transport and hub messages |
 | `N8nHttpHelper.ts` | `IN8nHttpHelper` interface — how lib classes accept HTTP without coupling to n8n context |
 
 ---
@@ -69,17 +68,9 @@ const hubService = new HubProfileService(hubBase, http);
 
 This keeps `lib/` classes independently testable and decoupled from the n8n execution context.
 
-### `HubConfig.ts` — environment flag
+### `HubConfig.ts` — production endpoint
 
-`HUB_BASE_URL` in `lib/HubConfig.ts` is currently set to `https://localhost:7093` for local development against a self-hosted hub. Before releasing, switch it to the production URL:
-
-```typescript
-// Development (current)
-export const HUB_BASE_URL = 'https://localhost:7093';
-
-// Production (uncomment before publishing)
-// export const HUB_BASE_URL = 'https://hub.nodeflex.io';
-```
+`HUB_BASE_URL` in `lib/HubConfig.ts` is hardcoded to the production hub, `https://hub.nodeflex.io`. If you need to point at a local self-hosted hub during development, edit this constant temporarily — do not commit that change.
 
 The `HubProfileService` also has `skipSslCertificateValidation: false` — leave it `false` in production.
 
